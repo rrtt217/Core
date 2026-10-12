@@ -34,6 +34,14 @@ scenario
 			"player1",
 			"player2",
 			"1",
+			-- Target selectors, including malformed input (must not crash):
+			"@a",
+			"@p",
+			"@s",
+			"@e[type=cow]",
+			"@e[type=!player]",
+			"@a[c=1]",
+			"@a[",
 		},
 		maxLen = 1,  -- Max number of elements chosen from "choices"
 	},

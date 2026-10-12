@@ -1,3 +1,4 @@
+-- luacheck: globals ResolveTargets MakeSelectorContext LOG SendMessageFailure
 -- Implements give and item commands and console commands
 
 
@@ -352,10 +353,50 @@ function HandleConsoleGive( Split, FullCmd )
 end
 
 
+--- Gives to every player matched by a target selector in Split[2], by re-running
+--  the single-target path once per player. Returns true when the selector path
+--  handled the command.
+--
+local function GiveToSelectorTargets( Split, Player, SafeCommand )
+
+	if (Split[2] == nil) or (Split[2]:sub(1, 1) ~= "@") then
+		return false
+	end
+
+	-- 1.12.2 /give and /unsafegive take "player name or target selector"; only
+	-- players have an inventory, so "@e" targets are narrowed to players.
+	local Targets, Reason = ResolveTargets( Split[2], MakeSelectorContext( Player ), "player" )
+	if Targets == nil then
+		if Player then
+			SendMessageFailure( Player, Reason )
+		else
+			LOG( Reason )
+		end
+		return true
+	end
+
+	for _, Target in ipairs( Targets ) do
+		local TargetSplit = {}
+		for Index, Value in ipairs( Split ) do
+			TargetSplit[Index] = Value
+		end
+		TargetSplit[2] = Target:GetName()
+		GiveItemCommand( TargetSplit, Player, SafeCommand )
+	end
+
+	return true
+
+end
+
+
 --- Handle the `give` console and in-game command
 --  Usage: give <player> <item> [amount] [data] [dataTag]
 --  
 function HandleGiveCommand( Split, Player )
+
+	if GiveToSelectorTargets( Split, Player, true ) then
+		return true
+	end
 
 	if not GiveItemCommand( Split, Player, true ) then
 		local Message = string.format( CommandUsage, Split[1] , GiveCommandUsageTail )
@@ -382,6 +423,10 @@ end
 --  Usage: unsafegive <player> <item> [amount] [data] [dataTag]
 --  
 function HandleUnsafeGiveCommand( Split, Player )
+
+	if GiveToSelectorTargets( Split, Player, false ) then
+		return true
+	end
 
 	if not GiveItemCommand( Split, Player, false ) then
 		local Message = string.format( CommandUsage, Split[1] , GiveCommandUsageTail )

@@ -1,3 +1,7 @@
+-- luacheck: new globals HandleChangeGMCommand HandleConsoleGamemode
+-- luacheck: globals ResolveTargets ApplyToTargets MakeSelectorContext
+-- luacheck: globals cRoot SendMessage SendMessageSuccess SendMessageFailure LOG
+-- luacheck: globals gmSurvival gmCreative gmAdventure gmSpectator
 -- gm.lua
 
 -- Implements gamemode and gm commands and console commands
@@ -36,12 +40,12 @@ local MessageFailure = "Player not found"
 
 
 --- Changes the gamemode of the given player
--- 
+--
 --  @param GameMode The gamemode to change to
 --  @param PlayerName The player name of the player to change the gamemode of
---  
+--
 --  @return true if player was found and gamemode successfully changed, false otherwise
---  
+--
 local function ChangeGameMode( GameMode, PlayerName )
 
 	local GMChanged = false
@@ -49,7 +53,7 @@ local function ChangeGameMode( GameMode, PlayerName )
 
 	-- Search through online players and if one matches
 	-- the given PlayerName then change their gamemode
-	cRoot:Get():FindAndDoWithPlayer(PlayerName, 
+	cRoot:Get():FindAndDoWithPlayer(PlayerName,
 		function(PlayerMatch)
 			if string.lower(PlayerMatch:GetName()) == lcPlayerName then
 				PlayerMatch:SetGameMode(GameMode)
@@ -64,8 +68,48 @@ local function ChangeGameMode( GameMode, PlayerName )
 
 end
 
+
+--- Applies a gamemode to every player matched by a target selector in Split[3].
+--  Returns true when the selector path handled the command (including failures).
+--
+local function ChangeGameModeBySelector(Split, Player, GameMode)
+
+	local Token = Split[3]
+	if (Token == nil) or (Token:sub(1, 1) ~= "@") then
+		return false
+	end
+
+	local Targets, Reason = ResolveTargets(Token, MakeSelectorContext(Player), "player")
+	if Targets == nil then
+		SendMessageFailure(Player, Reason)
+		return true
+	end
+
+	local Names = {}
+	ApplyToTargets(Targets, function (Target)
+		Target:SetGameMode(GameMode)
+		SendMessage(Target, "Gamemode set to " .. GameModeNameTable[GameMode])
+		Names[#Names + 1] = Target:GetName()
+	end)
+
+	local Description
+	if #Names == 1 then
+		Description = "player \"" .. Names[1] .. "\""
+	else
+		Description = #Names .. " players"
+	end
+	local Message = "Gamemode of " .. Description .. " set to " .. GameModeNameTable[GameMode]
+	if Player ~= nil then
+		SendMessageSuccess(Player, Message)
+	end
+	LOG(Message .. " by: " .. (Player and Player:GetName() or "console"))
+	return true
+
+end
+
+
 --- Handles the `/gamemode <survival|creative|adventure|spectator> [player]` in-game command
---  
+--
 function HandleChangeGMCommand(Split, Player)
 
 	-- Check params, translate into gamemode and player name:
@@ -73,6 +117,10 @@ function HandleChangeGMCommand(Split, Player)
 
 	if not GameMode then
 		SendMessage(Player, "Usage: " .. Split[1] .. " <survival|creative|adventure|spectator> [player]" )
+		return true
+	end
+
+	if ChangeGameModeBySelector(Split, Player, GameMode) then
 		return true
 	end
 
@@ -99,14 +147,22 @@ end
 
 
 --- Handles the `gamemode <survival|creative|adventure|spectator> [player]` console command
---  
+--
 function HandleConsoleGamemode( a_Split )
 
 	-- Check params, translate into gamemode and player name:
 	local GameMode = GameModeTable[a_Split[2]]
 	local PlayerToChange = a_Split[3]
-	
-	if not PlayerToChange or not GameMode then
+
+	if not GameMode then
+		return true, "Usage: " .. a_Split[1] .. " <survival|creative|adventure|spectator> <player> "
+	end
+
+	if ChangeGameModeBySelector(a_Split, nil, GameMode) then
+		return true
+	end
+
+	if not PlayerToChange then
 		return true, "Usage: " .. a_Split[1] .. " <survival|creative|adventure|spectator> <player> "
 	end
 
@@ -121,6 +177,6 @@ function HandleConsoleGamemode( a_Split )
 	else
 		LOG( MessageFailure )
 	end
-	
+
 	return true
 end

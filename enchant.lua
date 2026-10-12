@@ -1,3 +1,4 @@
+-- luacheck: globals ResolveTargets MakeSelectorContext LOG SendMessage
 -- enchant.lua
 
 
@@ -681,6 +682,33 @@ local function EnchantItem( PlayerName, EnchantmentIDString, LevelString )
 end
 
 
+--- Enchants the held item of every player matched by a target selector in
+--  PlayerNameToken. Returns nothing; the caller has already returned true.
+--
+local function EnchantSelectorTargets( PlayerNameToken, EnchantmentIDString, LevelString, Player )
+
+	-- 1.12.2 /enchant takes "player name or target selector"; only players hold an
+	-- item, so "@e" targets are narrowed to players.
+	local Targets, Reason = ResolveTargets( PlayerNameToken, MakeSelectorContext( Player ), "player" )
+	if Targets == nil then
+		SendMessage( Player, Reason )
+		return
+	end
+
+	for _, Target in ipairs( Targets ) do
+		local ReturnMessage, ItemName, EnchantmentName, CompletePlayerName, IsSuccess =
+			EnchantItem( Target:GetName(), EnchantmentIDString, LevelString )
+
+		SendMessage( Player, ReturnMessage )
+		if IsSuccess then
+			local MsgString = string.format( LogMessageSuccess, EnchantmentName, ItemName, CompletePlayerName )
+			LOG( string.format( ConsoleMessage, ( Player and Player:GetName() or "Console" ), MsgString ) )
+		end
+	end
+
+end
+
+
 --- Handles the enchant and ienchant in-game commands
 --  Usage: /enchant <player> <enchantment ID> [level]
 --  Usage: /ienchant <enchantment ID> [level]
@@ -703,6 +731,11 @@ function HandleEnchantCommand( Split, Player )
 	local PlayerName = Split[2]
 	local EnchantmentIDString = Split[3]
 	local LevelString = Split[4] or 1
+
+	if PlayerName:sub(1, 1) == "@" then
+		EnchantSelectorTargets( PlayerName, EnchantmentIDString, LevelString, Player )
+		return true
+	end
 
 	local ReturnMessage, ItemName, EnchantmentName, CompletePlayerName, IsSuccess =
 	EnchantItem(
@@ -733,6 +766,11 @@ function HandleConsoleEnchant( Split )
 	local PlayerName = Split[2]
 	local EnchantmentIDString = Split[3]
 	local LevelString = Split[4] or 1
+
+	if PlayerName:sub(1, 1) == "@" then
+		EnchantSelectorTargets( PlayerName, EnchantmentIDString, LevelString, nil )
+		return true
+	end
 
 	local ReturnMessage, ItemName, EnchantmentName, CompletePlayerName, IsSuccess =
 	EnchantItem(

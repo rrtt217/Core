@@ -51,7 +51,7 @@ g_PluginInfo =
 		{
 			Permission = "core.effect",
 			Handler = HandleEffectCommand,
-			HelpString = "Adds an effect to a player.",
+			HelpString = "Adds an effect to players or other entities (player name or target selector).",
 		},
 
 		["/enchant"] = 
@@ -823,7 +823,7 @@ g_PluginInfo =
 		["effect"] =
 		{
 			Handler =  HandleConsoleEffect,
-			HelpString = "Adds an effect to a player.",
+			HelpString = "Adds an effect to players or other entities (player name or target selector).",
 		},
 
 		["enchant"] = 
