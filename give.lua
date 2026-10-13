@@ -1,4 +1,4 @@
--- luacheck: globals ResolveTargets MakeSelectorContext LOG SendMessageFailure
+-- luacheck: globals ResolveTargets ApplyToTargets MakeSelectorContext LOG SendMessageFailure
 -- Implements give and item commands and console commands
 
 
@@ -179,7 +179,7 @@ end
 --  
 --  @return False if PlayerName or ItemName are missing, or Amount or DataValue are invalid, true otherwise
 --  
-local function GiveItemCommand( Split, Player, SafeCommand )
+local function GiveItemCommand( Split, Player, SafeCommand, a_DirectPlayer )
 
 	local PlayerName = Split[2]
 	local lcPlayerName = string.lower( PlayerName or "" )
@@ -332,8 +332,16 @@ local function GiveItemCommand( Split, Player, SafeCommand )
 	end
 
 	-- Finally give the items to the player.
-	-- Check to make sure that giving items was successful.
-	if not cRoot:Get():FindAndDoWithPlayer( PlayerName, giveItems ) then
+	-- Check to make sure that giving items was successful. A caller that already
+	-- holds the live player (the selector path) passes it in, so that no name
+	-- lookup -- and therefore no world lock -- happens here.
+	local Delivered
+	if ( a_DirectPlayer ~= nil ) then
+		Delivered = giveItems( a_DirectPlayer )
+	else
+		Delivered = cRoot:Get():FindAndDoWithPlayer( PlayerName, giveItems )
+	end
+	if not Delivered then
 		if Player then
 			SendMessageFailure( Player, MessagePlayerFailure )
 		else
@@ -375,14 +383,18 @@ local function GiveToSelectorTargets( Split, Player, SafeCommand )
 		return true
 	end
 
-	for _, Target in ipairs( Targets ) do
+	-- The targets are snapshot proxies, so the item is delivered inside a queued
+	-- action that runs on the target player's own world thread. Re-dispatching by
+	-- name would look the player up again, and that lookup locks every world (see
+	-- target_selectors.lua).
+	ApplyToTargets( Targets, function ( a_Target )
 		local TargetSplit = {}
 		for Index, Value in ipairs( Split ) do
 			TargetSplit[Index] = Value
 		end
-		TargetSplit[2] = Target:GetName()
-		GiveItemCommand( TargetSplit, Player, SafeCommand )
-	end
+		TargetSplit[2] = a_Target:GetName()
+		GiveItemCommand( TargetSplit, Player, SafeCommand, a_Target )
+	end )
 
 	return true
 
