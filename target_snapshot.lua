@@ -183,12 +183,19 @@ end
 
 
 
---- Concatenates one list of every world that has a snapshot. The order across
---- worlds is unspecified; the selector layer sorts whatever needs ordering.
+--- Concatenates one list of every world that has a snapshot. Worlds are visited in
+--- name order, which is the order cRoot iterates its std::map in; within a world
+--- the order is the enumeration order cWorld::ForEachEntity produced.
 local function ConcatLists(a_Field)
+	local Names = {}
+	for WorldName in pairs(g_Worlds) do
+		table.insert(Names, WorldName)
+	end
+	table.sort(Names)
+
 	local Result = {}
-	for _, Snapshot in pairs(g_Worlds) do
-		for _, Proxy in ipairs(Snapshot[a_Field]) do
+	for _, WorldName in ipairs(Names) do
+		for _, Proxy in ipairs(g_Worlds[WorldName][a_Field]) do
 			table.insert(Result, Proxy)
 		end
 	end
@@ -209,4 +216,56 @@ end
 
 function TargetSnapshot.GetAllPawns()
 	return ConcatLists("Pawns")
+end
+
+
+
+
+
+--- Resolves a player-name argument against the snapshot, mirroring
+--- cRoot::FindAndDoWithPlayer plus RateCompareString: a hint matches when it is a
+--- case-insensitive prefix of the player's name, the longest such prefix wins,
+--- ties are settled by enumeration order, and a perfect match wins outright.
+--- Returns a proxy, or nil when there is no unique best match.
+function TargetSnapshot.FindPlayerByName(a_NameHint)
+	--- Length of the case-insensitive common prefix of a_Hint and a_Name, or 0
+	--- when a_Hint is longer than a_Name (same rule as RateCompareString).
+	local function Rate(a_Hint, a_Name)
+		if (#a_Hint > #a_Name) then
+			return 0
+		end
+		local Matched = 0
+		for Index = 1, #a_Hint do
+			if (a_Hint:sub(Index, Index):upper() ~= a_Name:sub(Index, Index):upper()) then
+				break
+			end
+			Matched = Matched + 1
+		end
+		return Matched
+	end
+
+	local NameLength = #a_NameHint
+	local BestMatch = nil
+	local BestRating = 0
+	local NumMatches = 0
+	for _, Player in ipairs(TargetSnapshot.GetAllPlayers()) do
+		local Rating = Rate(a_NameHint, Player:GetName())
+		if ((Rating > 0) and (Rating >= BestRating)) then
+			BestMatch = Player
+			if (Rating > BestRating) then
+				NumMatches = 0
+			end
+			BestRating = Rating
+			NumMatches = NumMatches + 1
+		end
+		if (Rating == NameLength) then
+			-- Perfect match: cRoot stops enumerating here.
+			return BestMatch
+		end
+	end
+
+	if (NumMatches == 1) then
+		return BestMatch
+	end
+	return nil
 end

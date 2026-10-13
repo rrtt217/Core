@@ -85,11 +85,15 @@ local function ChangeGameModeBySelector(Split, Player, GameMode)
 		return true
 	end
 
+	-- The action is queued onto each target's world thread and runs later in this
+	-- tick, so the names for the response come from the selector result itself.
 	local Names = {}
+	for _, Target in ipairs(Targets) do
+		Names[#Names + 1] = Target:GetName()
+	end
 	ApplyToTargets(Targets, function (Target)
 		Target:SetGameMode(GameMode)
 		SendMessage(Target, "Gamemode set to " .. GameModeNameTable[GameMode])
-		Names[#Names + 1] = Target:GetName()
 	end)
 
 	local Description

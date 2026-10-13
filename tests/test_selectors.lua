@@ -19,10 +19,12 @@ if (arg == nil) or (arg[0] == nil) or (arg[0]:find("test_selectors") == nil) the
 end
 
 local ScriptDir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
+dofile(ScriptDir .. "/../target_snapshot.lua")
 dofile(ScriptDir .. "/../target_selectors.lua")
 
 -- luacheck: new globals cRoot cBoundingBox Vector3d cMonster
 -- luacheck: read globals ParseSelector ResolveSelectorToken ResolveTargets GetTargetName ApplyToTargets
+-- luacheck: read globals TargetSnapshot
 
 local NumPassed = 0
 local NumFailed = 0
@@ -177,6 +179,11 @@ cMonster =
 	end,
 }
 
+--- Counts every world enumeration the selector layer triggers. Resolving must not
+--- enumerate at all: on a live server that takes a world lock while Core's Lua
+--- lock is held, which is the deadlock the snapshot exists to avoid.
+local WorldEnumerations = 0
+
 local NextEntityID = 0
 
 local function BaseEntity(a_World, a_X, a_Y, a_Z)
@@ -235,10 +242,16 @@ local function MakeWorld(a_Name, a_Entities)
 	{
 		Name = a_Name,
 		Entities = a_Entities,
+		GetName = function (a_Self) return a_Self.Name end,
 		ForEachEntity = function (a_Self, a_Callback)
+			WorldEnumerations = WorldEnumerations + 1
 			for _, Entity in ipairs(a_Self.Entities) do
 				a_Callback(Entity)
 			end
+		end,
+		-- The mock runs the queued task immediately, so tests can observe it.
+		QueueTask = function (a_Self, a_Callback)
+			a_Callback(a_Self)
 		end,
 		ForEachPlayer = function (a_Self, a_Callback)
 			for _, Entity in ipairs(a_Self.Entities) do
@@ -276,29 +289,23 @@ local function BuildUniverse()
 	DefaultWorld.Entities = { Player1, Player2, Creeper, Cow, CaveSpider }
 	SecondWorld.Entities = { Player3, NetherZombie }
 
-	local Players = { Player1, Player2, Player3 }
+	-- The selector layer reads these snapshots, never the live world entity lists:
+	TargetSnapshot.RefreshWorld(DefaultWorld)
+	TargetSnapshot.RefreshWorld(SecondWorld)
+
 	cRoot =
 	{
 		Get = function () return cRoot end,
 		GetDefaultWorld = function () return DefaultWorld end,
-		FindAndDoWithPlayer = function (_, a_Name, a_Callback)
-			local lcName = a_Name:lower()
-			for _, Player in ipairs(Players) do
-				if (Player:GetName():lower():sub(1, #lcName) == lcName) then
-					a_Callback(Player)
-					return true
+		-- ApplyToTargets maps a proxy's world name back to the world object; this
+		-- lookup must not lock (cRoot::GetWorld is a plain map lookup).
+		GetWorld = function (_, a_Name)
+			for _, World in ipairs({ DefaultWorld, SecondWorld }) do
+				if (World:GetName() == a_Name) then
+					return World
 				end
 			end
-			return false
-		end,
-		ForEachPlayer = function (_, a_Callback)
-			for _, Player in ipairs(Players) do
-				a_Callback(Player)
-			end
-		end,
-		ForEachWorld = function (_, a_Callback)
-			a_Callback(DefaultWorld)
-			a_Callback(SecondWorld)
+			return nil
 		end,
 	}
 end
@@ -315,9 +322,9 @@ end
 local function ResolveToken(a_Token)
 	local Context =
 	{
-		World = DefaultWorld,
+		WorldName = DefaultWorld:GetName(),
 		Position = { x = 0, y = 64, z = 0 },
-		Executor = Player1,
+		Executor = TargetSnapshot.MakeProxy(Player1, DefaultWorld:GetName()),
 	}
 	local Entities, Reason = ResolveSelectorToken(a_Token, Context)
 	Check(Reason == nil, "Resolving " .. a_Token .. " should succeed (got " .. tostring(Reason) .. ")")
@@ -325,6 +332,8 @@ local function ResolveToken(a_Token)
 end
 
 local function TestResolver()
+	WorldEnumerations = 0
+
 	-- @a / @p / @e / @s:
 	CheckEquals(NamesOf(ResolveToken("@a")), "player1,player2,player3", "@a is every player")
 	CheckEquals(NamesOf(ResolveToken("@p")), "player1", "@p is the nearest player")
@@ -448,6 +457,9 @@ local function TestResolver()
 
 	Failed = ResolveSelectorToken("@a[rx=90]", nil)
 	Check(Failed == nil, "view angle does not resolve")
+
+	-- The whole point of the snapshot: resolving never touches a world lock.
+	CheckEquals(WorldEnumerations, 0, "resolving a selector never enumerates a world")
 end
 
 
@@ -455,11 +467,13 @@ end
 
 
 local function TestTargets()
+	WorldEnumerations = 0
+
 	local Context =
 	{
-		World = DefaultWorld,
+		WorldName = DefaultWorld:GetName(),
 		Position = { x = 0, y = 64, z = 0 },
-		Executor = Player1,
+		Executor = TargetSnapshot.MakeProxy(Player1, DefaultWorld:GetName()),
 	}
 
 	-- Plain names resolve through FindAndDoWithPlayer:
@@ -494,23 +508,29 @@ local function TestTargets()
 	CheckEquals(GetTargetName(Cows[1]), "Bessie", "GetTargetName uses the custom name")
 	local Creepers = ResolveTargets("@e[type=creeper]", Context, "pawn")
 	CheckEquals(GetTargetName(Creepers[1]), "creeper", "GetTargetName falls back to the mob type")
+
+	CheckEquals(WorldEnumerations, 0, "resolving command targets never enumerates a world")
 end
 
 local function TestApply()
+	WorldEnumerations = 0
+
 	local Context =
 	{
-		World = DefaultWorld,
+		WorldName = DefaultWorld:GetName(),
 		Position = { x = 0, y = 64, z = 0 },
-		Executor = Player1,
+		Executor = TargetSnapshot.MakeProxy(Player1, DefaultWorld:GetName()),
 	}
 
 	local Targets = ResolveTargets("@a", Context, "player")
 	CheckEquals(#Targets, 3, "@a selects three players before applying")
+	CheckEquals(WorldEnumerations, 0, "selection itself does not enumerate a world")
 
 	local Seen = {}
 	local Affected = ApplyToTargets(Targets, function (a_Target) table.insert(Seen, a_Target:GetName()) end)
 	table.sort(Seen)
-	CheckEquals(Affected, 3, "ApplyToTargets reports every affected target")
+	Check(WorldEnumerations > 0, "the queued action re-resolves on the target's world")
+	CheckEquals(Affected, 3, "ApplyToTargets reports every queued target")
 	CheckEquals(
 		table.concat(Seen, ","),
 		"player1,player2,player3",
@@ -526,9 +546,12 @@ local function TestApply()
 		end
 	end
 	DefaultWorld.Entities = Remaining
-	local Affected2 = ApplyToTargets(Targets, function () end)
-	CheckEquals(Affected2, 2, "vanished targets are skipped")
+	local Seen2 = {}
+	local Affected2 = ApplyToTargets(Targets, function (a_Target) table.insert(Seen2, a_Target:GetName()) end)
+	CheckEquals(Affected2, 3, "ApplyToTargets reports the planned count")
+	CheckEquals(#Seen2, 2, "a target that vanished before the queued task is skipped")
 	DefaultWorld.Entities = Saved
+	TargetSnapshot.RefreshWorld(DefaultWorld)
 end
 
 BuildUniverse()

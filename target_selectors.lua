@@ -18,7 +18,8 @@
 -- they are declared read-only and this file is allowed to define them.
 -- 111 == "setting non-standard global variable".
 -- luacheck: globals ParseSelector ResolveSelector ResolveSelectorToken ResolveTargets
--- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext cRoot cMonster cBoundingBox Vector3d
+-- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext cRoot cMonster cBoundingBox
+-- luacheck: globals Vector3d TargetSnapshot
 -- luacheck: ignore 111
 
 -- The five 1.12.2 selector variables. "@n" did not exist before 1.21 (24w21a),
@@ -218,15 +219,15 @@ end
 -- 1.12.2 semantics: "x" and "z" were centre-corrected, so "x=0" meant "x=0.5";
 -- "y" was not (see the 17w45a changelog: "x and z are no longer center-corrected").
 local function GetSelectorOrigin(a_Selector, a_Context)
-	local OriginWorld = nil
+	local OriginWorldName = nil
 	local BasePosition = nil
 	if (a_Context ~= nil) then
-		OriginWorld = a_Context.World
+		OriginWorldName = a_Context.WorldName
 		BasePosition = a_Context.Position
 	end
 
-	if (OriginWorld == nil) then
-		OriginWorld = cRoot:Get():GetDefaultWorld()
+	if (OriginWorldName == nil) then
+		OriginWorldName = cRoot:Get():GetDefaultWorld():GetName()
 	end
 
 	local X, Y, Z
@@ -235,6 +236,7 @@ local function GetSelectorOrigin(a_Selector, a_Context)
 	else
 		-- No execution position (console / RCON): the world spawn is used. This is
 		-- an approximation until the command origin lands with C2 [推测].
+		local OriginWorld = cRoot:Get():GetWorld(OriginWorldName) or cRoot:Get():GetDefaultWorld()
 		X, Y, Z = OriginWorld:GetSpawnX(), OriginWorld:GetSpawnY(), OriginWorld:GetSpawnZ()
 	end
 
@@ -249,7 +251,7 @@ local function GetSelectorOrigin(a_Selector, a_Context)
 		Z = Lookup.z.Number + 0.5
 	end
 
-	return OriginWorld, { x = X, y = Y, z = Z }
+	return OriginWorldName, { x = X, y = Y, z = Z }
 end
 
 
@@ -258,8 +260,8 @@ end
 
 -- Returns the squared distance between an entity and the origin, or nil when the
 -- entity lives in another world.
-local function GetSquaredDistance(a_Entity, a_OriginWorld, a_Origin)
-	if (a_Entity:GetWorld() ~= a_OriginWorld) then
+local function GetSquaredDistance(a_Entity, a_OriginWorldName, a_Origin)
+	if (a_Entity:GetWorld() ~= a_OriginWorldName) then
 		return nil
 	end
 	local Position = a_Entity:GetPosition()
@@ -415,7 +417,7 @@ end
 
 
 
-local function MatchesSelectorArgument(a_Entity, a_Argument, a_OriginWorld, a_Box, a_Distance)
+local function MatchesSelectorArgument(a_Entity, a_Argument, a_OriginWorldName, a_Box, a_Distance)
 	local Key = a_Argument.Key
 	if (Key == "type") then
 		return MatchesTypeArgument(a_Entity, a_Argument)
@@ -432,7 +434,7 @@ local function MatchesSelectorArgument(a_Entity, a_Argument, a_OriginWorld, a_Bo
 	elseif (Key == "r") then
 		if (a_Argument.Number < 0) then
 			-- A negative radius means "same dimension, any distance" in 1.12.2.
-			return (a_Entity:GetWorld() == a_OriginWorld)
+			return (a_Entity:GetWorld() == a_OriginWorldName)
 		end
 		-- Bound inclusivity is [待核]; inclusive is used here.
 		return (a_Distance ~= nil) and (a_Distance <= (a_Argument.Number * a_Argument.Number))
@@ -444,7 +446,7 @@ local function MatchesSelectorArgument(a_Entity, a_Argument, a_OriginWorld, a_Bo
 		end
 		-- The box lives in the origin world; an entity of another world must not
 		-- match just because its coordinates coincide.
-		return (a_Entity:GetWorld() == a_OriginWorld)
+		return (a_Entity:GetWorld() == a_OriginWorldName)
 			and a_Entity:GetBoundingBox():DoesIntersect(a_Box)
 	end
 
@@ -456,28 +458,15 @@ end
 
 
 
-local function MatchesSelector(a_Entity, a_Selector, a_OriginWorld, a_Box, a_Distance)
+local function MatchesSelector(a_Entity, a_Selector, a_OriginWorldName, a_Box, a_Distance)
 	for _, Argument in ipairs(a_Selector.Arguments) do
-		if (not MatchesSelectorArgument(a_Entity, Argument, a_OriginWorld, a_Box, a_Distance)) then
+		if (not MatchesSelectorArgument(a_Entity, Argument, a_OriginWorldName, a_Box, a_Distance)) then
 			return false
 		end
 	end
 	return true
 end
 
-
-
-
-
--- Calls the callback for every loaded entity of every loaded world.
-local function ForEachLoadedEntity(a_Callback)
-	cRoot:Get():ForEachWorld(
-		function (a_World)
-			a_World:ForEachEntity(a_Callback)
-			return false
-		end
-	)
-end
 
 
 
@@ -504,71 +493,53 @@ end
 
 
 
--- Calls the callback for every loaded pawn of a single world. Players live in the
--- chunk map as well (cWorld::AddEntity puts them in both), so this covers them.
-local function ForEachWorldPawn(a_World, a_Callback)
-	a_World:ForEachEntity(
-		function (a_Entity)
-			if (a_Entity:IsPawn()) then
-				a_Callback(a_Entity)
-			end
-			return false
-		end
-	)
-end
-
-
-
-
 
 -- Collects the candidate entities for a selector, before any filtering.
 --
+-- The candidates come from TargetSnapshot, never from a live enumeration: this
+-- layer runs on the command thread, where taking a world's chunkmap lock while
+-- Core's Lua lock is held deadlocks against the world thread (see
+-- target_snapshot.lua and the spec). Proxies are value copies, so they stay usable
+-- even when the entity is freed before the queued action runs.
+--
 -- a_NeedsOrigin selects the candidate set:
---   * true  -> only a_OriginWorld (position/distance-dependent selectors);
+--   * true  -> only a_OriginWorldName (position/distance-dependent selectors);
 --   * false -> every loaded world (the global "@a"/"@e"/"@r" set).
 -- "@s" is the executing entity (an empty set when there is none), "@a" is every
 -- player, "@e" is every loaded pawn, and "@p"/"@r" start from the players but
 -- switch to the pawn set when a "type" argument is given (1.12.2 behaviour).
-local function CollectSelectorCandidates(a_Selector, a_Executor, a_OriginWorld, a_NeedsOrigin)
-	local Candidates = {}
+local function CollectSelectorCandidates(a_Selector, a_Executor, a_OriginWorldName, a_NeedsOrigin)
 	local Variable = a_Selector.Variable
 
 	if (Variable == "s") then
-		if (a_Executor ~= nil) then
-			table.insert(Candidates, a_Executor)
+		if (a_Executor == nil) then
+			return {}
 		end
-		return Candidates
+		return { a_Executor }
 	end
 
 	local UseEntities = (a_Selector.Lookup.type ~= nil)
 	local WantPawns = (Variable == "e")
 		or (UseEntities and ((Variable == "p") or (Variable == "r")))
 
+	local Source
 	if (a_NeedsOrigin) then
-		if (WantPawns) then
-			ForEachWorldPawn(a_OriginWorld, function (a_Entity) table.insert(Candidates, a_Entity) end)
-		else
-			a_OriginWorld:ForEachPlayer(function (a_Player) table.insert(Candidates, a_Player) end)
-		end
-		return Candidates
-	end
-
-	if (WantPawns) then
+		Source = WantPawns and TargetSnapshot.GetPawns(a_OriginWorldName)
+			or TargetSnapshot.GetPlayers(a_OriginWorldName)
+	elseif (WantPawns) then
 		-- "@e": every loaded pawn of every world. Vanilla also selects items,
 		-- minecarts and the like; that is a known deviation until a verified
 		-- 1.12.2 entity-ID mapping exists.
-		ForEachLoadedEntity(
-			function (a_Entity)
-				if (a_Entity:IsPawn()) then
-					table.insert(Candidates, a_Entity)
-				end
-				return false
-			end
-		)
-		return Candidates
+		Source = TargetSnapshot.GetAllPawns()
+	else
+		Source = TargetSnapshot.GetAllPlayers()
 	end
 
-	cRoot:Get():ForEachPlayer(function (a_Player) table.insert(Candidates, a_Player) end)
+	-- Copy, so callers are free to reorder their own list.
+	local Candidates = {}
+	for _, Entity in ipairs(Source) do
+		table.insert(Candidates, Entity)
+	end
 	return Candidates
 end
 
@@ -577,7 +548,7 @@ end
 
 
 -- Applies the "c=" count, the distance ordering and (for "@r") the random pick.
-local function ApplySelectorCountAndOrder(a_Selector, a_Matches, a_OriginWorld, a_Origin)
+local function ApplySelectorCountAndOrder(a_Selector, a_Matches, a_OriginWorldName, a_Origin)
 	local Variable = a_Selector.Variable
 
 	local Count = nil
@@ -627,7 +598,7 @@ local function ApplySelectorCountAndOrder(a_Selector, a_Matches, a_OriginWorld, 
 	-- unspecified [待核].
 	local Ordered = {}
 	for _, Entity in ipairs(a_Matches) do
-		local Distance = GetSquaredDistance(Entity, a_OriginWorld, a_Origin)
+		local Distance = GetSquaredDistance(Entity, a_OriginWorldName, a_Origin)
 		if (Distance ~= nil) then
 			table.insert(Ordered, { Entity = Entity, Distance = Distance })
 		end
@@ -665,7 +636,7 @@ end
 -- list on success, or nil plus a reason when the selector cannot be resolved.
 --
 -- The context is optional and reserved for the C2 command-execution context:
---   { World = <cWorld>, Position = <Vector3d>, Executor = <cEntity> }
+--   { WorldName = <string>, Position = <Vector3d>, Executor = <proxy> }
 -- When it is nil, "@s" resolves to nothing and the origin falls back to the
 -- default world's spawn point.
 function ResolveSelector(a_Selector, a_Context)
@@ -684,19 +655,19 @@ function ResolveSelector(a_Selector, a_Context)
 		Executor = a_Context.Executor
 	end
 
-	local OriginWorld, Origin = GetSelectorOrigin(a_Selector, a_Context)
+	local OriginWorldName, Origin = GetSelectorOrigin(a_Selector, a_Context)
 	local Box = GetSelectorBox(a_Selector, Origin)
 	local NeedsOrigin = SelectorNeedsOrigin(a_Selector)
 
 	local Matches = {}
-	for _, Entity in ipairs(CollectSelectorCandidates(a_Selector, Executor, OriginWorld, NeedsOrigin)) do
-		local Distance = GetSquaredDistance(Entity, OriginWorld, Origin)
-		if (MatchesSelector(Entity, a_Selector, OriginWorld, Box, Distance)) then
+	for _, Entity in ipairs(CollectSelectorCandidates(a_Selector, Executor, OriginWorldName, NeedsOrigin)) do
+		local Distance = GetSquaredDistance(Entity, OriginWorldName, Origin)
+		if (MatchesSelector(Entity, a_Selector, OriginWorldName, Box, Distance)) then
 			table.insert(Matches, Entity)
 		end
 	end
 
-	return ApplySelectorCountAndOrder(a_Selector, Matches, OriginWorld, Origin)
+	return ApplySelectorCountAndOrder(a_Selector, Matches, OriginWorldName, Origin)
 end
 
 
@@ -723,11 +694,14 @@ function MakeSelectorContext(a_Player)
 	if (a_Player == nil) then
 		return nil
 	end
+	local WorldName = a_Player:GetWorld():GetName()
 	return
 	{
-		World = a_Player:GetWorld(),
+		WorldName = WorldName,
 		Position = a_Player:GetPosition(),
-		Executor = a_Player,
+		-- "@s" resolves to the executor. Snapshot it right away, while it is
+		-- certainly alive, so the rest of the layer only ever sees value copies.
+		Executor = TargetSnapshot.MakeProxy(a_Player, WorldName),
 	}
 end
 
@@ -765,9 +739,11 @@ function ResolveTargets(a_Token, a_Context, a_Kind)
 	end
 
 	if (a_Token:sub(1, 1) ~= "@") then
-		-- A plain argument addresses an online player by name only.
-		local Found
-		if (not cRoot:Get():FindAndDoWithPlayer(a_Token, function (a_Player) Found = a_Player end)) then
+		-- A plain argument addresses an online player by name. The lookup goes
+		-- through the snapshot: cRoot:FindAndDoWithPlayer locks every world, the
+		-- same deadlock shape as the enumeration (see target_snapshot.lua).
+		local Found = TargetSnapshot.FindPlayerByName(a_Token)
+		if (Found == nil) then
 			return nil, "Player \"" .. a_Token .. "\" not found"
 		end
 		return { Found }
@@ -794,46 +770,57 @@ end
 
 
 
--- Runs a_Action on every selected target while the engine holds that target's
--- world lock.
+-- Queues a_Action for every selected target onto that target's own world.
 --
--- The selection is re-enumerated per world and the action runs *inside* the
--- enumeration callback: cWorld::ForEachEntity / ForEachPlayer hold the world's
--- chunkmap lock for the whole callback, and cEntity::Destroy() only defers the
--- real removal (via QueueTask), so acting there -- even killing -- is safe.
--- Doing it after the enumeration returns would touch another world's entities
--- with no lock held.
+-- This layer runs on the command thread with Core's Lua lock held, so it must not
+-- take a world lock itself (that inverts against the world thread and deadlocks;
+-- see target_snapshot.lua). Each world's targets are re-resolved on that world's
+-- thread and the action runs there, inside the enumeration callback:
+-- cEntity::Destroy() only defers the real removal, so acting there -- even
+-- killing -- is safe, and the callback runs on the thread that owns the chunk.
 --
--- Entities are matched by UniqueID, never by Lua object reference: references
--- must not be carried across worlds, and a target that vanished in between is
--- simply skipped. Returns the number of targets the action ran on.
+-- a_Targets are snapshot proxies: they carry a unique ID and a world name, never
+-- an entity reference (entities are std::unique_ptr-owned by their chunk). A
+-- target that vanished in the meantime is simply skipped by the re-resolution.
+-- Returns the number of targets the action was queued for; a target that dies
+-- before its world's task runs makes that an over-count.
 function ApplyToTargets(a_Targets, a_Action)
 	local ByWorld = {}
 	local Order = {}
-	for _, Entity in ipairs(a_Targets) do
-		local World = Entity:GetWorld()
-		local Ids = ByWorld[World]
+	for _, Target in ipairs(a_Targets) do
+		local WorldName = Target:GetWorld()
+		local Ids = ByWorld[WorldName]
 		if (Ids == nil) then
 			Ids = {}
-			ByWorld[World] = Ids
-			table.insert(Order, { World = World, Ids = Ids })
+			ByWorld[WorldName] = Ids
+			table.insert(Order, { WorldName = WorldName, Ids = Ids })
 		end
-		Ids[Entity:GetUniqueID()] = true
+		Ids[Target:GetUniqueID()] = true
 	end
 
 	local Affected = 0
 	for _, Entry in ipairs(Order) do
-		Entry.World:ForEachEntity(
-			function (a_Entity)
-				local Id = a_Entity:GetUniqueID()
-				if (Entry.Ids[Id]) then
-					Entry.Ids[Id] = nil  -- never run the action twice on one entity
-					a_Action(a_Entity)
-					Affected = Affected + 1
-				end
-				return false
+		local World = cRoot:Get():GetWorld(Entry.WorldName)
+		if (World ~= nil) then
+			for _ in pairs(Entry.Ids) do
+				Affected = Affected + 1
 			end
-		)
+			local Ids = Entry.Ids
+			World:QueueTask(
+				function (a_World)
+					a_World:ForEachEntity(
+						function (a_Entity)
+							local Id = a_Entity:GetUniqueID()
+							if (Ids[Id]) then
+								Ids[Id] = nil  -- never run the action twice on one entity
+								a_Action(a_Entity)
+							end
+							return false
+						end
+					)
+				end
+			)
+		end
 	end
 	return Affected
 end

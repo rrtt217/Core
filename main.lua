@@ -21,6 +21,7 @@ function Initialize(Plugin)
 	cPluginManager:AddHook(cPluginManager.HOOK_TAKE_DAMAGE,           OnTakeDamage)
 	cPluginManager:AddHook(cPluginManager.HOOK_TICK,                  OnTick)
 	cPluginManager:AddHook(cPluginManager.HOOK_WORLD_TICK,            OnWorldTick)
+	cPluginManager:AddHook(cPluginManager.HOOK_WORLD_TICK,            TargetSnapshot.OnWorldTick)
 
 	-- Bind ingame commands:
 	dofile(cPluginManager:GetPluginsPath() .. "/InfoReg.lua")
