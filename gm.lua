@@ -82,7 +82,7 @@ local function ChangeGameModeBySelector(Split, Player, GameMode)
 	local Targets, Reason = ResolveTargets(Token, MakeSelectorContext(Player), "player")
 	if Targets == nil then
 		SendMessageFailure(Player, Reason)
-		return true
+		return true, "", 0
 	end
 
 	local Names = {}
@@ -103,7 +103,7 @@ local function ChangeGameModeBySelector(Split, Player, GameMode)
 		SendMessageSuccess(Player, Message)
 	end
 	LOG(Message .. " by: " .. (Player and Player:GetName() or "console"))
-	return true
+	return true, "", #Names
 
 end
 
@@ -120,8 +120,9 @@ function HandleChangeGMCommand(Split, Player)
 		return true
 	end
 
-	if ChangeGameModeBySelector(Split, Player, GameMode) then
-		return true
+	local SelectorHandled, SelectorMessage, SelectorCount = ChangeGameModeBySelector(Split, Player, GameMode)
+	if SelectorHandled then
+		return true, SelectorMessage, SelectorCount
 	end
 
 	local PlayerToChange = Split[3] or Player:GetName()
@@ -158,8 +159,9 @@ function HandleConsoleGamemode( a_Split )
 		return true, "Usage: " .. a_Split[1] .. " <survival|creative|adventure|spectator> <player> "
 	end
 
-	if ChangeGameModeBySelector(a_Split, nil, GameMode) then
-		return true
+	local SelectorHandled, SelectorMessage, SelectorCount = ChangeGameModeBySelector(a_Split, nil, GameMode)
+	if SelectorHandled then
+		return true, SelectorMessage, SelectorCount
 	end
 
 	if not PlayerToChange then

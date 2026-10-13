@@ -4,6 +4,7 @@
 
 function HandleEffectCommand(Split, Player)
 	local Response
+	local SuccessCount = 0
 
 	if not Split[4] then
 		Split[4] = 30
@@ -39,6 +40,7 @@ function HandleEffectCommand(Split, Player)
 		end
 
 		local Affected = ApplyToTargets(Targets, Callback)
+		SuccessCount = Affected
 
 		if IsSelector then
 			Response = SendMessageSuccess(Player, SuccessMultiple(Affected))
@@ -89,7 +91,7 @@ function HandleEffectCommand(Split, Player)
 			end
 		)
 	end
-	return true, Response
+	return true, Response, SuccessCount
 end
 
 function HandleConsoleEffect(Split)

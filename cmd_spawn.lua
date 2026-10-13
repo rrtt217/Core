@@ -4,6 +4,7 @@
 
 function HandleSpawnCommand(Split, Player)
 	local Response
+	local SuccessCount = 0
 
 	local MoveToSpawn = function(OtherPlayer)
 		local World = OtherPlayer:GetWorld()
@@ -16,9 +17,10 @@ function HandleSpawnCommand(Split, Player)
 			Response = SendMessage(nil, "Usage: " .. Split[1] .. " <targets>")
 		else
 			MoveToSpawn(Player)
+			SuccessCount = 1
 			Response = SendMessageSuccess(Player, "Successfully moved to world spawn")
 		end
-		return true, Response
+		return true, Response, SuccessCount
 	end
 
 	if not Player or Player:HasPermission("core.spawn.others") then
@@ -27,6 +29,7 @@ function HandleSpawnCommand(Split, Player)
 			Response = SendMessageFailure(Player, Reason)
 		else
 			local Affected = ApplyToTargets(Targets, MoveToSpawn)
+			SuccessCount = Affected
 
 			if (Split[2]:sub(1, 1) == "@") and (Affected > 1) then
 				Response = SendMessageSuccess(Player, "Successfully returned " .. Affected .. " players to world spawn")
@@ -38,7 +41,7 @@ function HandleSpawnCommand(Split, Player)
 			end
 		end
 	end
-	return true, Response
+	return true, Response, SuccessCount
 end
 
 function HandleConsoleSpawn(Split)

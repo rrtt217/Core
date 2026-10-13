@@ -4,6 +4,7 @@
 
 function HandleClearCommand(Split, Player)
 	local Response
+	local SuccessCount = 0
 
 	local ClearInventory = function(OtherPlayer)
 		OtherPlayer:GetInventory():Clear()
@@ -14,9 +15,10 @@ function HandleClearCommand(Split, Player)
 			Response = SendMessage(nil, "Usage: " .. Split[1] .. " <targets>")
 		else
 			ClearInventory(Player)
+			SuccessCount = 1
 			Response = SendMessageSuccess(Player, "You cleared your own inventory")
 		end
-		return true, Response
+		return true, Response, SuccessCount
 	end
 
 	if not Player or Player:HasPermission("core.admin.clear") then
@@ -27,6 +29,7 @@ function HandleClearCommand(Split, Player)
 			Response = SendMessageFailure(Player, Reason)
 		else
 			local Affected = ApplyToTargets(Targets, ClearInventory)
+			SuccessCount = Affected
 
 			if (Split[2]:sub(1, 1) == "@") and (Affected > 1) then
 				Response = SendMessageSuccess(Player, "You cleared the inventory of " .. Affected .. " players")
@@ -35,7 +38,7 @@ function HandleClearCommand(Split, Player)
 			end
 		end
 	end
-	return true, Response
+	return true, Response, SuccessCount
 end
 
 function HandleConsoleClear(Split)

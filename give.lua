@@ -372,7 +372,7 @@ local function GiveToSelectorTargets( Split, Player, SafeCommand )
 		else
 			LOG( Reason )
 		end
-		return true
+		return true, "", 0
 	end
 
 	for _, Target in ipairs( Targets ) do
@@ -384,7 +384,7 @@ local function GiveToSelectorTargets( Split, Player, SafeCommand )
 		GiveItemCommand( TargetSplit, Player, SafeCommand )
 	end
 
-	return true
+	return true, "", #Targets
 
 end
 

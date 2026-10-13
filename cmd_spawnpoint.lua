@@ -1,6 +1,7 @@
 -- luacheck: globals ResolveTargets ApplyToTargets MakeSelectorContext SendMessageFailure
 function HandleSpawnPointCommand(Split, Player)
 	local Response
+	local SuccessCount = 0
 	
 	local X
 	local Y
@@ -60,18 +61,21 @@ function HandleSpawnPointCommand(Split, Player)
 		Response = SendMessage(Player, "Usage: " .. Split[1] .. " <targets> <x> <y> <z> [world]")
 	elseif not Split[2] then
 		SetSpawnPoint(Player)
+		SuccessCount = 1
 	elseif Split[2]:sub(1, 1) == "@" then
 		-- 1.12.2 /spawnpoint takes "player name or target selector" (players only).
 		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player), "player")
 		if Targets == nil then
 			Response = SendMessageFailure(Player, Reason)
 		else
-			ApplyToTargets(Targets, SetSpawnPoint)
+			SuccessCount = ApplyToTargets(Targets, SetSpawnPoint)
 		end
 	elseif Split[2] == "" or not cRoot:Get():FindAndDoWithPlayer(Split[2], SetSpawnPoint) then
 		Response = SendMessageFailure(Player, "Player \"" .. Split[2] .. "\" not found")
+	else
+		SuccessCount = 1
 	end
-	return true, Response
+	return true, Response, SuccessCount
 end
 
 function HandleConsoleSpawnPoint(Split)
