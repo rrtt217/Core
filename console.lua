@@ -1,5 +1,6 @@
 
 -- console.lua
+-- luacheck: globals ParseCommandCoords GetOriginPosition cRoot
 
 -- Implements things related to console commands
 -- TODO: remove this file, migrate commands below to unified cmd_*.lua format
@@ -69,28 +70,32 @@ end
 
 
 
-function HandleConsoleTeleport(Split)
-	local TeleportToCoords = function(Player)
-		if (Player:GetName() == Split[2]) then
+function HandleConsoleTeleport(Split, _, _, Origin)
+	-- These locals must be declared before the closures below: a closure that assigns a name which the
+	-- enclosing scope declares *later* writes a global instead, and the outer read never sees it.
+	local IsPlayerOnline = false
+	local FirstPlayerOnline = false
+	local PosX, PosY, PosZ
+
+	local TeleportToCoords = function(TargetPlayer)
+		if (TargetPlayer:GetName() == Split[2]) then
 			IsPlayerOnline = true
-			Player:TeleportToCoords(Split[3], Split[4], Split[5])
+			TargetPlayer:TeleportToCoords(PosX, PosY, PosZ)
 		end
 	end
 
-	local IsPlayerOnline = false
-	local FirstPlayerOnline = false
-	local GetPlayerCoords = function(Player)
-		if (Player:GetName() == Split[3]) then
-			PosX = Player:GetPosX()
-			PosY = Player:GetPosY()
-			PosZ = Player:GetPosZ()
+	local GetPlayerCoords = function(SourcePlayer)
+		if (SourcePlayer:GetName() == Split[3]) then
+			PosX = SourcePlayer:GetPosX()
+			PosY = SourcePlayer:GetPosY()
+			PosZ = SourcePlayer:GetPosZ()
 			FirstPlayerOnline = true
 		end
 	end
 
-	local TeleportToPlayer = function(Player)
-		if (Player:GetName() == Split[2]) then
-		    Player:TeleportToCoords(PosX, PosY, PosZ)
+	local TeleportToPlayer = function(TargetPlayer)
+		if (TargetPlayer:GetName() == Split[2]) then
+			TargetPlayer:TeleportToCoords(PosX, PosY, PosZ)
 			IsPlayerOnline = true
 		end
 	end
@@ -102,16 +107,23 @@ function HandleConsoleTeleport(Split)
 			if (IsPlayerOnline) then
 				return true, "Teleported " .. Split[2] .." to " .. Split[3]
 			end
-		else
-				return true, "Player " .. Split[3] .." not found"
+			return true, "Player " .. Split[2] .." not found"
 		end
+		return true, "Player " .. Split[3] .." not found"
+
 	elseif (#Split == 5) then
+		local X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], GetOriginPosition(Origin))
+		if (X == nil) then
+			return true, Reason
+		end
+		PosX, PosY, PosZ = X, Y, Z
+
 		cRoot:Get():FindAndDoWithPlayer(Split[2], TeleportToCoords)
 		if (IsPlayerOnline) then
-			return true, "You teleported " .. Split[2] .. " to [X:" .. Split[3] .. " Y:" .. Split[4] .. " Z:" .. Split[5] .. "]"
-		else
-			return true, "Player not found"
+			return true, "You teleported " .. Split[2] .. " to [X:" .. X .. " Y:" .. Y .. " Z:" .. Z .. "]"
 		end
+		return true, "Player not found"
+
 	else
 		return true, "Usage: '" .. Split[1] .. " <target player> <destination player>' or 'tp <target player> <x> <y> <z>'"
 	end

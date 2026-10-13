@@ -38,6 +38,9 @@ function KickPlayer(PlayerName, Reason)
 	return true
 end
 
+--- Superseded: parses only "~" against a caller-supplied base, which is why the coordinate commands
+-- now use ParseCommandCoord()/ParseCommandCoords() from command_coords.lua with the command origin
+-- (specs/vanilla-1.12.2-command-coordinates.md). Kept for Lua that still calls it.
 function RelativeCommandCoord(Split, Coord)
 	if Split then
 		if string.sub(Split, 1, 1) == "~" then

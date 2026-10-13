@@ -2,7 +2,7 @@
 -- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess ResolveTargets
 -- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext dtPlugin
 
-function HandleKillCommand(Split, Player)
+function HandleKillCommand(Split, Player, _, Origin)
 	local Response
 	local SuccessCount = 0
 
@@ -21,7 +21,7 @@ function HandleKillCommand(Split, Player)
 	end
 
 	-- 1.12.2 /kill takes "player name or target selector" and also kills non-players.
-	local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player), "entity")
+	local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player, Origin), "entity")
 	if Targets == nil then
 		Response = SendMessageFailure(Player, Reason)
 		return true, Response, 0
@@ -40,6 +40,7 @@ function HandleKillCommand(Split, Player)
 	return true, Response, SuccessCount
 end
 
-function HandleConsoleKill(Split)
-	return HandleKillCommand(Split)
+function HandleConsoleKill(Split, _, EntireCommand, Origin)
+	-- Console commands have no player; the engine still passes the origin as the 4th argument:
+	return HandleKillCommand(Split, nil, EntireCommand, Origin)
 end

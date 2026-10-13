@@ -2,7 +2,7 @@
 -- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess ResolveTargets
 -- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext
 
-function HandleClearCommand(Split, Player)
+function HandleClearCommand(Split, Player, _, Origin)
 	local Response
 	local SuccessCount = 0
 
@@ -24,7 +24,7 @@ function HandleClearCommand(Split, Player)
 	if not Player or Player:HasPermission("core.admin.clear") then
 		-- 1.12.2 /clear takes "player name or target selector". Only players have an
 		-- inventory to clear, so "@e" targets are narrowed to players.
-		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player), "player")
+		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player, Origin), "player")
 		if Targets == nil then
 			Response = SendMessageFailure(Player, Reason)
 		else
@@ -41,6 +41,7 @@ function HandleClearCommand(Split, Player)
 	return true, Response, SuccessCount
 end
 
-function HandleConsoleClear(Split)
-	return HandleClearCommand(Split)
+function HandleConsoleClear(Split, _, EntireCommand, Origin)
+	-- Console commands have no player; the engine still passes the origin as the 4th argument:
+	return HandleClearCommand(Split, nil, EntireCommand, Origin)
 end

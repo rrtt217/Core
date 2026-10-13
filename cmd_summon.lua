@@ -1,3 +1,5 @@
+-- luacheck: globals ParseCommandCoords GetOriginPosition SpawnEntity
+-- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess cRoot
 local Minecarts =
 {
 	["minecart"] = E_ITEM_MINECART,
@@ -144,7 +146,7 @@ local function SpawnEntity(EntityName, World, X, Y, Z, Player)
 	return true
 end
 
-function HandleSummonCommand(Split, Player)
+function HandleSummonCommand(Split, Player, _, Origin)
 	local Response
 
 	if not Split[2] or (not Player and not Split[5]) then
@@ -154,26 +156,30 @@ function HandleSummonCommand(Split, Player)
 		local Y
 		local Z
 		local World = cRoot:Get():GetDefaultWorld()
-		
-		if Player then
-			X = Player:GetPosX()
-			Y = Player:GetPosY()
-			Z = Player:GetPosZ()
+
+		-- The command's execution position: a command block's own position, a player's feet. Relative
+		-- coordinates are resolved against it (specs/vanilla-1.12.2-command-coordinates.md):
+		local BasePosition = GetOriginPosition(Origin)
+		if (BasePosition == nil) and (Player ~= nil) then
+			BasePosition = Player:GetPosition()
+		end
+
+		if (Origin ~= nil) and (Origin:GetWorld() ~= nil) then
+			World = Origin:GetWorld()
+		elseif Player then
 			World = Player:GetWorld()
 		end
 
 		if Split[5] then
-			X = RelativeCommandCoord(Split[3], X)
-			Y = RelativeCommandCoord(Split[4], Y)
-			Z = RelativeCommandCoord(Split[5], Z)
-
-			if not X then
-				return true, SendMessageFailure(Player, "'" .. Split[3] .. "' is not a valid number")
-			elseif not Y then
-				return true, SendMessageFailure(Player, "'" .. Split[4] .. "' is not a valid number")
-			elseif not Z then
-				return true, SendMessageFailure(Player, "'" .. Split[5] .. "' is not a valid number")
+			local Reason
+			X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], BasePosition)
+			if (X == nil) then
+				return true, SendMessageFailure(Player, Reason)
 			end
+		elseif Player then
+			X = Player:GetPosX()
+			Y = Player:GetPosY()
+			Z = Player:GetPosZ()
 		end
 
 		if SpawnEntity(Split[2], World, X, Y, Z, Player) then
@@ -185,6 +191,7 @@ function HandleSummonCommand(Split, Player)
 	return true, Response
 end
 
-function HandleConsoleSummon(Split)
-	return HandleSummonCommand(Split)
+function HandleConsoleSummon(Split, _, EntireCommand, Origin)
+	-- The engine passes the origin as the 4th argument; console commands have no player:
+	return HandleSummonCommand(Split, nil, EntireCommand, Origin)
 end

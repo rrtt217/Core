@@ -2,7 +2,7 @@
 -- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess ResolveTargets GetTargetName
 -- luacheck: globals ApplyToTargets MakeSelectorContext
 
-function HandleEffectCommand(Split, Player)
+function HandleEffectCommand(Split, Player, _, Origin)
 	local Response
 	local SuccessCount = 0
 
@@ -33,7 +33,7 @@ function HandleEffectCommand(Split, Player)
 	-- "@e is permitted to target entities other than players", so pawns are the kind
 	-- (cPawn:AddEntityEffect covers players and monsters alike).
 	local ApplyToResolvedTargets = function(Callback, SuccessSingle, SuccessMultiple)
-		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player), "pawn")
+		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player, Origin), "pawn")
 		if Targets == nil then
 			Response = SendMessageFailure(Player, Reason)
 			return
@@ -94,6 +94,7 @@ function HandleEffectCommand(Split, Player)
 	return true, Response, SuccessCount
 end
 
-function HandleConsoleEffect(Split)
-	return HandleEffectCommand(Split)
+function HandleConsoleEffect(Split, _, EntireCommand, Origin)
+	-- Console commands have no player; the engine still passes the origin as the 4th argument:
+	return HandleEffectCommand(Split, nil, EntireCommand, Origin)
 end

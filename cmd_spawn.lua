@@ -2,7 +2,7 @@
 -- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess ResolveTargets GetTargetName
 -- luacheck: globals ApplyToTargets MakeSelectorContext
 
-function HandleSpawnCommand(Split, Player)
+function HandleSpawnCommand(Split, Player, _, Origin)
 	local Response
 	local SuccessCount = 0
 
@@ -24,7 +24,7 @@ function HandleSpawnCommand(Split, Player)
 	end
 
 	if not Player or Player:HasPermission("core.spawn.others") then
-		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player), "player")
+		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player, Origin), "player")
 		if Targets == nil then
 			Response = SendMessageFailure(Player, Reason)
 		else
@@ -44,6 +44,7 @@ function HandleSpawnCommand(Split, Player)
 	return true, Response, SuccessCount
 end
 
-function HandleConsoleSpawn(Split)
-	return HandleSpawnCommand(Split)
+function HandleConsoleSpawn(Split, _, EntireCommand, Origin)
+	-- Console commands have no player; the engine still passes the origin as the 4th argument:
+	return HandleSpawnCommand(Split, nil, EntireCommand, Origin)
 end

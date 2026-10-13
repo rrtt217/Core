@@ -72,14 +72,14 @@ end
 --- Applies a gamemode to every player matched by a target selector in Split[3].
 --  Returns true when the selector path handled the command (including failures).
 --
-local function ChangeGameModeBySelector(Split, Player, GameMode)
+local function ChangeGameModeBySelector(Split, Player, GameMode, Origin)
 
 	local Token = Split[3]
 	if (Token == nil) or (Token:sub(1, 1) ~= "@") then
 		return false
 	end
 
-	local Targets, Reason = ResolveTargets(Token, MakeSelectorContext(Player), "player")
+	local Targets, Reason = ResolveTargets(Token, MakeSelectorContext(Player, Origin), "player")
 	if Targets == nil then
 		SendMessageFailure(Player, Reason)
 		return true, "", 0
@@ -110,7 +110,7 @@ end
 
 --- Handles the `/gamemode <survival|creative|adventure|spectator> [player]` in-game command
 --
-function HandleChangeGMCommand(Split, Player)
+function HandleChangeGMCommand(Split, Player, _, Origin)
 
 	-- Check params, translate into gamemode and player name:
 	local GameMode = GameModeTable[Split[2]]
@@ -120,7 +120,7 @@ function HandleChangeGMCommand(Split, Player)
 		return true
 	end
 
-	local SelectorHandled, SelectorMessage, SelectorCount = ChangeGameModeBySelector(Split, Player, GameMode)
+	local SelectorHandled, SelectorMessage, SelectorCount = ChangeGameModeBySelector(Split, Player, GameMode, Origin)
 	if SelectorHandled then
 		return true, SelectorMessage, SelectorCount
 	end
@@ -149,7 +149,7 @@ end
 
 --- Handles the `gamemode <survival|creative|adventure|spectator> [player]` console command
 --
-function HandleConsoleGamemode( a_Split )
+function HandleConsoleGamemode( a_Split, _, _, a_Origin )
 
 	-- Check params, translate into gamemode and player name:
 	local GameMode = GameModeTable[a_Split[2]]
@@ -159,7 +159,7 @@ function HandleConsoleGamemode( a_Split )
 		return true, "Usage: " .. a_Split[1] .. " <survival|creative|adventure|spectator> <player> "
 	end
 
-	local SelectorHandled, SelectorMessage, SelectorCount = ChangeGameModeBySelector(a_Split, nil, GameMode)
+	local SelectorHandled, SelectorMessage, SelectorCount = ChangeGameModeBySelector(a_Split, nil, GameMode, a_Origin)
 	if SelectorHandled then
 		return true, SelectorMessage, SelectorCount
 	end

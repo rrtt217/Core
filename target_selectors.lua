@@ -18,7 +18,8 @@
 -- they are declared read-only and this file is allowed to define them.
 -- 111 == "setting non-standard global variable".
 -- luacheck: globals ParseSelector ResolveSelector ResolveSelectorToken ResolveTargets
--- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext cRoot cMonster cBoundingBox Vector3d
+-- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext GetOriginPosition
+-- luacheck: globals cRoot cMonster cBoundingBox Vector3d
 -- luacheck: ignore 111
 
 -- The five 1.12.2 selector variables. "@n" did not exist before 1.21 (24w21a),
@@ -719,15 +720,39 @@ end
 -- Builds a selector context from the player running a command, so that "@s" and
 -- the distance-based selectors use the player's world and position. Returns nil
 -- for the console (and for command blocks until C2 supplies an origin).
-function MakeSelectorContext(a_Player)
-	if (a_Player == nil) then
-		return nil
+--- Builds the context a target selector is resolved against.
+-- The world and the position come from the command origin (cCommandOrigin), so a command block or
+-- the console resolves its selectors against its own position instead of the default world's spawn.
+-- a_Player is only used as a fallback for callers that have no origin, and as the executor.
+function MakeSelectorContext(a_Player, a_Origin)
+	local World = nil
+	local Position = nil
+
+	if (a_Origin ~= nil) then
+		World = a_Origin:GetWorld()
+		Position = GetOriginPosition(a_Origin)
 	end
+
+	if (a_Player ~= nil) then
+		if (World == nil) then
+			World = a_Player:GetWorld()
+		end
+		if (Position == nil) then
+			Position = a_Player:GetPosition()
+		end
+	end
+
+	local Executor = a_Player
+	if (Executor == nil) and (a_Origin ~= nil) then
+		Executor = a_Origin:GetPlayer()
+	end
+
 	return
 	{
-		World = a_Player:GetWorld(),
-		Position = a_Player:GetPosition(),
-		Executor = a_Player,
+		World = World,
+		Position = Position,
+		Executor = Executor,
+		Origin = a_Origin,
 	}
 end
 

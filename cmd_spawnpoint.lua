@@ -1,5 +1,6 @@
 -- luacheck: globals ResolveTargets ApplyToTargets MakeSelectorContext SendMessageFailure
-function HandleSpawnPointCommand(Split, Player)
+-- luacheck: globals ParseCommandCoords GetOriginPosition
+function HandleSpawnPointCommand(Split, Player, _, Origin)
 	local Response
 	local SuccessCount = 0
 	
@@ -7,38 +8,31 @@ function HandleSpawnPointCommand(Split, Player)
 	local Y
 	local Z
 	local World = cRoot:Get():GetDefaultWorld()
-	
+
+	-- Relative coordinates resolve against the command's execution position (the origin), not against
+	-- the target player (specs/vanilla-1.12.2-command-coordinates.md):
+	local BasePosition = GetOriginPosition(Origin)
+
 	if Player then
 		X = Player:GetPosX()
 		Y = Player:GetPosY()
 		Z = Player:GetPosZ()
 		World = Player:GetWorld()
 	end
+	if (BasePosition == nil) and (Player ~= nil) then
+		BasePosition = Player:GetPosition()
+	end
+	if (Origin ~= nil) and (Origin:GetWorld() ~= nil) then
+		World = Origin:GetWorld()
+	end
 
 	local SetSpawnPoint = function(OtherPlayer)
 		if Split[5] then
-			if not Player then
-				X = OtherPlayer:GetPosX()
-				Y = OtherPlayer:GetPosY()
-				Z = OtherPlayer:GetPosZ()
-			end
-
-			X = RelativeCommandCoord(Split[3], X)
-
-			if not X then
-				Response = SendMessageFailure(Player, "'" .. Split[3] .. "' is not a valid number")
-			end
-
-			Y = RelativeCommandCoord(Split[4], Y)
-
-			if not Y then
-				Response = SendMessageFailure(Player, "'" .. Split[4] .. "' is not a valid number")
-			end
-
-			Z = RelativeCommandCoord(Split[5], Z)
-
-			if not Z then
-				Response = SendMessageFailure(Player, "'" .. Split[5] .. "' is not a valid number")
+			local Reason
+			X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], BasePosition)
+			if (X == nil) then
+				Response = SendMessageFailure(Player, Reason)
+				return
 			end
 		end
 		
@@ -64,7 +58,7 @@ function HandleSpawnPointCommand(Split, Player)
 		SuccessCount = 1
 	elseif Split[2]:sub(1, 1) == "@" then
 		-- 1.12.2 /spawnpoint takes "player name or target selector" (players only).
-		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player), "player")
+		local Targets, Reason = ResolveTargets(Split[2], MakeSelectorContext(Player, Origin), "player")
 		if Targets == nil then
 			Response = SendMessageFailure(Player, Reason)
 		else
@@ -78,6 +72,7 @@ function HandleSpawnPointCommand(Split, Player)
 	return true, Response, SuccessCount
 end
 
-function HandleConsoleSpawnPoint(Split)
-	return HandleSpawnPointCommand(Split)
+function HandleConsoleSpawnPoint(Split, _, EntireCommand, Origin)
+	-- Console commands have no player; the engine still passes the origin as the 4th argument:
+	return HandleSpawnPointCommand(Split, nil, EntireCommand, Origin)
 end

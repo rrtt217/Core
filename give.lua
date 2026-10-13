@@ -348,8 +348,9 @@ end
 --- Handle the give console command, wrapper for HandleGiveCommand
 --  Necessary due to Cuberite now supplying additional parameters
 --  
-function HandleConsoleGive( Split, FullCmd )
-	return HandleGiveCommand( Split )
+function HandleConsoleGive( Split, _, FullCmd, Origin )
+	-- The engine calls console handlers as (Split, Player = nil, EntireCommand, Origin):
+	return HandleGiveCommand( Split, nil, FullCmd, Origin )
 end
 
 
@@ -357,7 +358,7 @@ end
 --  the single-target path once per player. Returns true when the selector path
 --  handled the command.
 --
-local function GiveToSelectorTargets( Split, Player, SafeCommand )
+local function GiveToSelectorTargets( Split, Player, SafeCommand, Origin )
 
 	if (Split[2] == nil) or (Split[2]:sub(1, 1) ~= "@") then
 		return false
@@ -365,7 +366,7 @@ local function GiveToSelectorTargets( Split, Player, SafeCommand )
 
 	-- 1.12.2 /give and /unsafegive take "player name or target selector"; only
 	-- players have an inventory, so "@e" targets are narrowed to players.
-	local Targets, Reason = ResolveTargets( Split[2], MakeSelectorContext( Player ), "player" )
+	local Targets, Reason = ResolveTargets( Split[2], MakeSelectorContext( Player, Origin ), "player" )
 	if Targets == nil then
 		if Player then
 			SendMessageFailure( Player, Reason )
@@ -392,9 +393,9 @@ end
 --- Handle the `give` console and in-game command
 --  Usage: give <player> <item> [amount] [data] [dataTag]
 --  
-function HandleGiveCommand( Split, Player )
+function HandleGiveCommand( Split, Player, _, Origin )
 
-	if GiveToSelectorTargets( Split, Player, true ) then
+	if GiveToSelectorTargets( Split, Player, true, Origin ) then
 		return true
 	end
 
@@ -414,17 +415,17 @@ end
 --- Handle the unsafegive console command, wrapper for HandleUnsafeGiveCommand
 --  Necessary due to Cuberite now supplying additional parameters
 --  
-function HandleConsoleUnsafeGive( Split, FullCmd )
-	return HandleUnsafeGiveCommand( Split )
+function HandleConsoleUnsafeGive( Split, _, FullCmd, Origin )
+	return HandleUnsafeGiveCommand( Split, nil, FullCmd, Origin )
 end
 
 
 --- Handle the `unsafegive` console and in-game command
 --  Usage: unsafegive <player> <item> [amount] [data] [dataTag]
 --  
-function HandleUnsafeGiveCommand( Split, Player )
+function HandleUnsafeGiveCommand( Split, Player, _, Origin )
 
-	if GiveToSelectorTargets( Split, Player, false ) then
+	if GiveToSelectorTargets( Split, Player, false, Origin ) then
 		return true
 	end
 
