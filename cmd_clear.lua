@@ -33,8 +33,11 @@ function HandleClearCommand(Split, Player, _, Origin)
 
 			if (Split[2]:sub(1, 1) == "@") and (Affected > 1) then
 				Response = SendMessageSuccess(Player, "You cleared the inventory of " .. Affected .. " players")
-			else
+			elseif (Targets[1] ~= nil) then
 				Response = SendMessageSuccess(Player, "You cleared the inventory of player \"" .. GetTargetName(Targets[1]) .. "\"")
+			else
+				-- The origin world had no match; the other worlds were queued and are reported separately:
+				Response = SendMessageSuccess(Player, "You cleared the inventory of " .. Affected .. " players")
 			end
 		end
 	end

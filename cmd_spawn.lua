@@ -33,11 +33,14 @@ function HandleSpawnCommand(Split, Player, _, Origin)
 
 			if (Split[2]:sub(1, 1) == "@") and (Affected > 1) then
 				Response = SendMessageSuccess(Player, "Successfully returned " .. Affected .. " players to world spawn")
-			else
+			elseif (Targets[1] ~= nil) then
 				Response = SendMessageSuccess(
 					Player,
 					"Successfully returned player \"" .. GetTargetName(Targets[1]) .. "\" to world spawn"
 				)
+			else
+				-- The origin world had no match; the other worlds were queued and are reported separately:
+				Response = SendMessageSuccess(Player, "Successfully returned " .. Affected .. " players to world spawn")
 			end
 		end
 	end

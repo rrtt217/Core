@@ -32,10 +32,13 @@ function HandleKillCommand(Split, Player, _, Origin)
 
 	if (Split[2]:sub(1, 1) == "@") and (Affected > 1) then
 		Response = SendMessageSuccess(Player, "Successfully killed " .. Affected .. " targets")
-	elseif Targets[1]:IsPlayer() then
+	elseif (Targets[1] ~= nil) and Targets[1]:IsPlayer() then
 		Response = SendMessageSuccess(Player, "Successfully killed player \"" .. GetTargetName(Targets[1]) .. "\"")
-	else
+	elseif (Targets[1] ~= nil) then
 		Response = SendMessageSuccess(Player, "Successfully killed target \"" .. GetTargetName(Targets[1]) .. "\"")
+	else
+		-- The origin world had no match; the other worlds were queued and are reported separately:
+		Response = SendMessageSuccess(Player, "Successfully killed " .. Affected .. " targets")
 	end
 	return true, Response, SuccessCount
 end
