@@ -1,4 +1,4 @@
--- luacheck: globals ResolveTargets MakeSelectorContext LOG SendMessageFailure
+-- luacheck: globals ResolveTargets ApplyToTargets MakeSelectorContext LOG SendMessageFailure
 -- Implements give and item commands and console commands
 
 
@@ -179,7 +179,7 @@ end
 --  
 --  @return False if PlayerName or ItemName are missing, or Amount or DataValue are invalid, true otherwise
 --  
-local function GiveItemCommand( Split, Player, SafeCommand )
+local function GiveItemCommand( Split, Player, SafeCommand, a_DirectPlayer )
 
 	local PlayerName = Split[2]
 	local lcPlayerName = string.lower( PlayerName or "" )
@@ -332,8 +332,16 @@ local function GiveItemCommand( Split, Player, SafeCommand )
 	end
 
 	-- Finally give the items to the player.
-	-- Check to make sure that giving items was successful.
-	if not cRoot:Get():FindAndDoWithPlayer( PlayerName, giveItems ) then
+	-- Check to make sure that giving items was successful. A caller that already holds the live player
+	-- (the selector path) passes it in, so that no name lookup - and therefore no world lock - happens
+	-- here:
+	local Delivered
+	if ( a_DirectPlayer ~= nil ) then
+		Delivered = giveItems( a_DirectPlayer )
+	else
+		Delivered = cRoot:Get():FindAndDoWithPlayer( PlayerName, giveItems )
+	end
+	if not Delivered then
 		if Player then
 			SendMessageFailure( Player, MessagePlayerFailure )
 		else
@@ -376,16 +384,26 @@ local function GiveToSelectorTargets( Split, Player, SafeCommand, Origin )
 		return true, "", 0
 	end
 
-	for _, Target in ipairs( Targets ) do
+	-- The action runs on each target's own world thread (immediately for the origin world, through that
+	-- world's task queue otherwise, see target_selectors.lua); passing the live target avoids the name
+	-- lookup that would lock every world:
+	local Affected = ApplyToTargets( Targets, function ( a_Target, a_Deferred )
 		local TargetSplit = {}
 		for Index, Value in ipairs( Split ) do
 			TargetSplit[Index] = Value
 		end
-		TargetSplit[2] = Target:GetName()
-		GiveItemCommand( TargetSplit, Player, SafeCommand )
-	end
+		TargetSplit[2] = a_Target:GetName()
 
-	return true, "", #Targets
+		-- A queued action runs one tick later on another world's thread, so it must not touch the
+		-- executor's userdata; it behaves like a console run for the feedback line (spec section 7.3):
+		local ActingPlayer = Player
+		if (a_Deferred) then
+			ActingPlayer = nil
+		end
+		GiveItemCommand( TargetSplit, ActingPlayer, SafeCommand, a_Target )
+	end )
+
+	return true, "", Affected
 
 end
 

@@ -135,6 +135,9 @@ end
 local DefaultWorld
 local SecondWorld
 
+local QueuedTasks = {}
+local WriteBacks = {}
+
 local function MakeBox(MinX, MinY, MinZ, MaxX, MaxY, MaxZ)
 	return
 	{
@@ -235,6 +238,7 @@ local function MakeWorld(a_Name, a_Entities)
 	{
 		Name = a_Name,
 		Entities = a_Entities,
+		GetName = function (a_Self) return a_Self.Name end,
 		ForEachEntity = function (a_Self, a_Callback)
 			for _, Entity in ipairs(a_Self.Entities) do
 				a_Callback(Entity)
@@ -250,6 +254,14 @@ local function MakeWorld(a_Name, a_Entities)
 		GetSpawnX = function () return 0 end,
 		GetSpawnY = function () return 64 end,
 		GetSpawnZ = function () return 0 end,
+		QueueTask = function (a_Self, a_Task)
+			-- D2 queues the other worlds' work on their own threads; the tests run it inline:
+			table.insert(QueuedTasks, { World = a_Self, Task = a_Task })
+		end,
+		SetCommandBlockSuccessCount = function (a_Self, a_X, a_Y, a_Z, a_Count)
+			table.insert(WriteBacks, { World = a_Self, X = a_X, Y = a_Y, Z = a_Z, Count = a_Count })
+			return true
+		end,
 	}
 end
 
@@ -300,6 +312,15 @@ local function BuildUniverse()
 			a_Callback(DefaultWorld)
 			a_Callback(SecondWorld)
 		end,
+		GetWorld = function (_, a_Name)
+			if (a_Name == DefaultWorld:GetName()) then
+				return DefaultWorld
+			end
+			if (a_Name == SecondWorld:GetName()) then
+				return SecondWorld
+			end
+			return nil
+		end,
 	}
 end
 
@@ -326,14 +347,14 @@ end
 
 local function TestResolver()
 	-- @a / @p / @e / @s:
-	CheckEquals(NamesOf(ResolveToken("@a")), "player1,player2,player3", "@a is every player")
+	CheckEquals(NamesOf(ResolveToken("@a")), "player1,player2", "@a is every player of the origin world")
 	CheckEquals(NamesOf(ResolveToken("@p")), "player1", "@p is the nearest player")
 	CheckEquals(NamesOf(ResolveToken("@p[c=-1]")), "player2", "@p[c=-1] is the farthest same-world player")
 	CheckEquals(NamesOf(ResolveToken("@a[c=2]")), "player1,player2", "@a[c=2] keeps the nearest two")
 	CheckEquals(
 		NamesOf(ResolveToken("@e")),
-		"player1,player2,player3,type:cavespider,type:cow,type:creeper,type:zombie",
-		"@e is every loaded pawn of every world"
+		"player1,player2,type:cavespider,type:cow,type:creeper",
+		"@e is every loaded pawn of the origin world (other worlds are deferred)"
 	)
 	CheckEquals(NamesOf(ResolveToken("@s")), "player1", "@s is the executing entity")
 	CheckEquals(NamesOf(ResolveToken("@p[type=cow]")), "type:cow", "@p[type=cow] switches to entities")
@@ -353,13 +374,13 @@ local function TestResolver()
 	)
 	CheckEquals(
 		NamesOf(ResolveToken("@e[type=player]")),
-		"player1,player2,player3",
-		"type=player selects players"
+		"player1,player2",
+		"type=player selects the origin world's players"
 	)
 	CheckEquals(
 		NamesOf(ResolveToken("@e[type=!creeper]")),
-		"player1,player2,player3,type:cavespider,type:cow,type:zombie",
-		"negated type"
+		"player1,player2,type:cavespider,type:cow",
+		"negated type (within the origin world)"
 	)
 	CheckEquals(#ResolveToken("@a[type=cow]"), 0, "@a never selects non-players")
 
@@ -367,7 +388,7 @@ local function TestResolver()
 	CheckEquals(NamesOf(ResolveToken("@a[name=player2]")), "player2", "name match")
 	CheckEquals(#ResolveToken("@a[name=Player2]"), 0, "name match is case-sensitive [推测]")
 	CheckEquals(NamesOf(ResolveToken("@e[name=Bessie]")), "type:cow", "name matches custom names")
-	CheckEquals(NamesOf(ResolveToken("@a[name=!player1]")), "player2,player3", "negated name")
+	CheckEquals(NamesOf(ResolveToken("@a[name=!player1]")), "player2", "negated name (other worlds are deferred)")
 
 	-- c=:
 	CheckEquals(NamesOf(ResolveToken("@e[c=1]")), "player1", "c=1 keeps the nearest")
@@ -422,17 +443,17 @@ local function TestResolver()
 
 	-- l= / lm=:
 	CheckEquals(NamesOf(ResolveToken("@a[l=5]")), "player2", "l= maximum level")
-	CheckEquals(NamesOf(ResolveToken("@a[lm=5]")), "player1,player3", "lm= minimum level")
+	CheckEquals(NamesOf(ResolveToken("@a[lm=5]")), "player1", "lm= minimum level (other worlds are deferred)")
 
 	-- m=:
 	CheckEquals(NamesOf(ResolveToken("@a[m=creative]")), "player2", "m= gamemode")
 	CheckEquals(NamesOf(ResolveToken("@a[m=c]")), "player2", "m= gamemode alias")
-	CheckEquals(NamesOf(ResolveToken("@a[m=!creative]")), "player1,player3", "m= negation")
+	CheckEquals(NamesOf(ResolveToken("@a[m=!creative]")), "player1", "m= negation (other worlds are deferred)")
 
 	-- team=:
 	CheckEquals(NamesOf(ResolveToken("@a[team=red]")), "player1", "team= match")
-	CheckEquals(NamesOf(ResolveToken("@a[team=]")), "player2,player3", "team= no team")
-	CheckEquals(NamesOf(ResolveToken("@a[team=!red]")), "player2,player3", "team=!red")
+	CheckEquals(NamesOf(ResolveToken("@a[team=]")), "player2", "team= no team (other worlds are deferred)")
+	CheckEquals(NamesOf(ResolveToken("@a[team=!red]")), "player2", "team=!red (other worlds are deferred)")
 	CheckEquals(NamesOf(ResolveToken("@a[team=!]")), "player1", "team=! any team")
 
 	-- Unsupported arguments must fail loudly, not silently match everyone:
@@ -466,21 +487,29 @@ local function TestTargets()
 	CheckEquals(NamesOf(ResolveTargets("player1", nil, "player")), "player1", "ResolveTargets by name")
 	CheckEquals(
 		NamesOf(ResolveTargets("@a", Context, "player")),
-		"player1,player2,player3",
-		"ResolveTargets @a as players"
+		"player1,player2",
+		"ResolveTargets @a as players (the nether player is deferred)"
 	)
 	CheckEquals(
 		NamesOf(ResolveTargets("@e", Context, "pawn")),
-		"player1,player2,player3,type:cavespider,type:cow,type:creeper,type:zombie",
-		"ResolveTargets @e as pawns"
+		"player1,player2,type:cavespider,type:cow,type:creeper",
+		"ResolveTargets @e as pawns (the nether pawns are deferred)"
 	)
 
-	-- A selector that matches nothing of the requested kind is a failure:
-	local Failed, Reason = ResolveTargets("@e[type=cow]", Context, "player")
-	Check(Failed == nil, "ResolveTargets @e[type=cow] as players fails")
+	-- A selector whose origin world has nothing of the requested kind is not a failure any more: the
+	-- other worlds may still match, and they are visited by their own threads (method D2). The command
+	-- then reports a zero count instead of "no target matched" (spec section 7.3):
+	local Empty, Reason = ResolveTargets("@e[type=cow]", Context, "player")
+	Check(Empty ~= nil, "no origin-world match is not an error: " .. tostring(Reason))
+	CheckEquals(#Empty, 0, "no live targets in the origin world")
+	Check(Empty.Deferred ~= nil, "the other worlds are still visited")
+
+	-- A selector that is dimension-bound (and therefore never deferred) still fails:
+	local Failed, FailedReason = ResolveTargets("@e[type=cow,r=5]", Context, "player")
+	Check(Failed == nil, "a dimension-bound selector with no match fails")
 	Check(
-		(Reason ~= nil) and (Reason:find("No target matched") ~= nil),
-		"empty selector result reason (got " .. tostring(Reason) .. ")"
+		(FailedReason ~= nil) and (FailedReason:find("No target matched") ~= nil),
+		"empty selector result reason (got " .. tostring(FailedReason) .. ")"
 	)
 
 	-- Malformed selector, unknown name and empty token all fail:
@@ -505,16 +534,16 @@ local function TestApply()
 	}
 
 	local Targets = ResolveTargets("@a", Context, "player")
-	CheckEquals(#Targets, 3, "@a selects three players before applying")
+	CheckEquals(#Targets, 2, "@a selects the origin world's players before applying")
 
 	local Seen = {}
 	local Affected = ApplyToTargets(Targets, function (a_Target) table.insert(Seen, a_Target:GetName()) end)
 	table.sort(Seen)
-	CheckEquals(Affected, 3, "ApplyToTargets reports every affected target")
+	CheckEquals(Affected, 2, "ApplyToTargets reports the origin world's affected targets")
 	CheckEquals(
 		table.concat(Seen, ","),
-		"player1,player2,player3",
-		"ApplyToTargets visits every selected target across worlds"
+		"player1,player2",
+		"ApplyToTargets visits the origin world's targets immediately"
 	)
 
 	-- A target that vanished between selection and application is skipped:
@@ -527,7 +556,7 @@ local function TestApply()
 	end
 	DefaultWorld.Entities = Remaining
 	local Affected2 = ApplyToTargets(Targets, function () end)
-	CheckEquals(Affected2, 2, "vanished targets are skipped")
+	CheckEquals(Affected2, 1, "vanished targets are skipped")
 	DefaultWorld.Entities = Saved
 end
 

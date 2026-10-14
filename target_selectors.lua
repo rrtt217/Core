@@ -471,20 +471,6 @@ end
 
 
 -- Calls the callback for every loaded entity of every loaded world.
---- Calls the callback for every loaded entity of every world.
--- Only used for the dimension-agnostic selectors of commands that have an executor, which keep the
--- live cross-world behaviour; executor-less origins go through the queued path instead (spec section 7).
-local function ForEachLoadedEntity(a_Callback)
-	cRoot:Get():ForEachWorld(
-		function (a_World)
-			a_World:ForEachEntity(a_Callback)
-			return false
-		end
-	)
-end
-
-
-
 --- Names of every world except the origin one, collected without touching any world's lock:
 -- cRoot::ForEachWorld only walks the world map and GetName() is a plain accessor, so a command that
 -- may span dimensions can learn the other worlds without risking the cross-world lock order
@@ -556,7 +542,7 @@ end
 -- "@s" is the executing entity (an empty set when there is none), "@a" is every
 -- player, "@e" is every loaded pawn, and "@p"/"@r" start from the players but
 -- switch to the pawn set when a "type" argument is given (1.12.2 behaviour).
-local function CollectSelectorCandidates(a_Selector, a_Executor, a_OriginWorld, a_AllWorlds)
+local function CollectSelectorCandidates(a_Selector, a_Executor, a_OriginWorld)
 	local Candidates = {}
 	local Variable = a_Selector.Variable
 
@@ -577,26 +563,7 @@ local function CollectSelectorCandidates(a_Selector, a_Executor, a_OriginWorld, 
 	local WantPawns = (Variable == "e")
 		or (UseEntities and ((Variable == "p") or (Variable == "r")))
 
-	if (a_AllWorlds) then
-		-- A command with an executor keeps the previous live cross-world selection, so player commands
-		-- stay parity-correct. (It is also the path that can nest two world locks; the executor-less
-		-- origins, i.e. command blocks and the console, use the queued path below instead.)
-		if (WantPawns) then
-			ForEachLoadedEntity(
-				function (a_Entity)
-					if (a_Entity:IsPawn()) then
-						table.insert(Candidates, a_Entity)
-					end
-					return false
-				end
-			)
-		else
-			cRoot:Get():ForEachPlayer(function (a_Player) table.insert(Candidates, a_Player) end)
-		end
-		return Candidates
-	end
-
-	-- Otherwise candidates are restricted to the origin world. Vanilla's bare "@e"/"@a" do span
+	-- Candidates are restricted to the origin world. Vanilla's bare "@e"/"@a" do span
 	-- dimensions (spec section 2.1c), but the other worlds are queued by ApplyToTargets() and resolved
 	-- on their own threads, so no other world's lock is ever taken from here (spec section 7.2).
 	-- (Vanilla also selects items, minecarts and the like with "@e"; that is a known deviation until a
@@ -724,13 +691,8 @@ function ResolveSelector(a_Selector, a_Context)
 	local OriginWorld, Origin = GetSelectorOrigin(a_Selector, a_Context)
 	local Box = GetSelectorBox(a_Selector, Origin)
 
-	-- Dimension-agnostic selectors of a command that has an executor stay live across the worlds (the
-	-- pre-D2 behaviour, kept for parity); executor-less origins (command blocks, the console) use the
-	-- queued path instead, because they run with a world lock already held (spec section 7).
-	local AllWorlds = (Executor ~= nil) and not SelectorNeedsOrigin(a_Selector)
-
 	local Matches = {}
-	for _, Entity in ipairs(CollectSelectorCandidates(a_Selector, Executor, OriginWorld, AllWorlds)) do
+	for _, Entity in ipairs(CollectSelectorCandidates(a_Selector, Executor, OriginWorld)) do
 		local Distance = GetSquaredDistance(Entity, OriginWorld, Origin)
 		if (MatchesSelector(Entity, a_Selector, OriginWorld, Box, Distance)) then
 			table.insert(Matches, Entity)
@@ -839,7 +801,8 @@ local function GetSelectorDeferral(a_Token, a_Context)
 	if (Selector == nil) or SelectorNeedsOrigin(Selector) then
 		return nil
 	end
-	if (a_Context.Executor ~= nil) then
+	if (Selector.Variable == "s") then
+		-- "@s" is the executing entity itself, which always lives in the origin world:
 		return nil
 	end
 	local OriginWorld = a_Context.World
@@ -855,7 +818,8 @@ local function GetSelectorDeferral(a_Token, a_Context)
 	-- (0, 0, 0) and a player command has an executor (spec section 7.3):
 	local Writable = false
 	local Position = a_Context.Position
-	if (Position ~= nil) and ((Position.x ~= 0) or (Position.y ~= 0) or (Position.z ~= 0)) then
+	if (a_Context.Executor == nil) and (Position ~= nil)
+		and ((Position.x ~= 0) or (Position.y ~= 0) or (Position.z ~= 0)) then
 		Writable = true
 	end
 
@@ -1008,7 +972,7 @@ end
 --- Runs the action on the resolved targets (which all live in one world) and returns how many it ran
 -- on. Enumerating that world is safe from here: it is the world the command executes in, whose lock the
 -- engine already holds (spec section 3.1 of the command execution threading spec).
-local function ApplyToTargetsHere(a_Targets, a_Action)
+local function ApplyToTargetsHere(a_Targets, a_Action, a_Deferred)
 	local ByWorld = {}
 	local Order = {}
 	for _, Entity in ipairs(a_Targets) do
@@ -1029,7 +993,7 @@ local function ApplyToTargetsHere(a_Targets, a_Action)
 				local Id = a_Entity:GetUniqueID()
 				if (Entry.Ids[Id]) then
 					Entry.Ids[Id] = nil  -- never run the action twice on one entity
-					a_Action(a_Entity)
+					a_Action(a_Entity, a_Deferred)
 					Affected = Affected + 1
 				end
 				return false
@@ -1071,7 +1035,9 @@ function ApplyToTargets(a_Targets, a_Action)
 				function ()
 					-- Runs on that world's own thread, so resolving and acting here only takes its lock:
 					local Targets = ResolveDeferredTargets(Deferred, World)
-					local Count = ApplyToTargetsHere(Targets, a_Action)
+					-- a_Deferred = true tells the action that it runs on another world's thread one tick
+					-- later, so it must not touch the executor (spec section 7.3):
+					local Count = ApplyToTargetsHere(Targets, a_Action, true)
 					if (Key ~= nil) then
 						ReportDeferredResult(Key, Count)
 					end

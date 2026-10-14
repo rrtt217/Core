@@ -258,18 +258,33 @@ local function TestNoDeferralWhenDimensionBoundOrExecuted()
 	ApplyToTargets(Positioned, function () end)
 	CheckEquals(#QueuedTasks, 0, "nothing is queued for a position-based selector")
 
-	-- A command with an executor keeps the previous live behaviour: a queued action must not carry an
-	-- executor reference across ticks (spec section 7.3):
+	-- A command with an executor defers the other worlds too, but has no command block whose count could
+	-- be corrected, and the queued action must not receive the executor (spec section 7.3):
 	local Player = MakePawn(Overworld, 1, 64, 1)
 	Player.IsPlayer = function () return true end
 	Player.IsMob = function () return false end
 	local ExecutedContext = { World = Overworld, Position = { x = 1, y = 64, z = 1 }, Executor = Player }
-	local Executed = ResolveTargets("@e", ExecutedContext, "entity")
-	Check(Executed ~= nil, "the executor's selector resolves")
-	Check(Executed and Executed.Deferred == nil, "an executed command is not deferred")
-	ApplyToTargets(Executed, function () end)
-	CheckEquals(#QueuedTasks, 0, "nothing is queued for an executed command")
+	local Executed, ExecutedReason = ResolveTargets("@e", ExecutedContext, "entity")
+	Check(Executed ~= nil, "the executor's selector resolves: " .. tostring(ExecutedReason))
+	Check(Executed and Executed.Deferred ~= nil, "an executed command defers the other worlds too")
+	Check(
+		not (Executed and Executed.Deferred and Executed.Deferred.Writable),
+		"a player command has nothing to write back"
+	)
+
+	local Flags = {}
+	ApplyToTargets(Executed, function (_, a_Deferred)
+		table.insert(Flags, a_Deferred and "deferred" or "live")
+	end)
+	RunQueuedTasks()
+	table.sort(Flags)
+	CheckEquals(table.concat(Flags, ","), "deferred,live", "the live action is live and the queued one is deferred")
 	CheckEquals(#WriteBacks, 0, "nothing is written back for an executed command")
+
+	-- "@s" is the entity executing the command, which always lives in the origin world:
+	local Self, SelfReason = ResolveTargets("@s", ExecutedContext, "entity")
+	Check(Self ~= nil, "@s resolves: " .. tostring(SelfReason))
+	Check(Self and Self.Deferred == nil, "@s is never deferred")
 end
 
 

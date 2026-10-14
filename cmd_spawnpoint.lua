@@ -26,12 +26,19 @@ function HandleSpawnPointCommand(Split, Player, _, Origin)
 		World = Origin:GetWorld()
 	end
 
-	local SetSpawnPoint = function(OtherPlayer)
+	local SetSpawnPoint = function(OtherPlayer, a_Deferred)
+		-- A queued action runs one tick later on another world's thread, so it must not touch the
+		-- executor's userdata; it behaves like a console run for the feedback line (spec section 7.3):
+		local ActingPlayer = Player
+		if (a_Deferred) then
+			ActingPlayer = nil
+		end
+
 		if Split[5] then
 			local Reason
 			X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], BasePosition)
 			if (X == nil) then
-				Response = SendMessageFailure(Player, Reason)
+				Response = SendMessageFailure(ActingPlayer, Reason)
 				return
 			end
 		end
@@ -40,14 +47,18 @@ function HandleSpawnPointCommand(Split, Player, _, Origin)
 			World = cRoot:Get():GetWorld(Split[6])
 
 			if not World then
-				Response = SendMessageFailure(Player, "Invalid world \"" .. Split[6] .. "\"")
+				Response = SendMessageFailure(ActingPlayer, "Invalid world \"" .. Split[6] .. "\"")
 			end
 		end
 
 		if not Response then
 			OtherPlayer:SetRespawnPosition(Vector3i(X, Y, Z), World)
 
-			Response = SendMessageSuccess(Player, "Set the spawn point of player \"" .. OtherPlayer:GetName() .. "\" to (" .. math.floor(X) .. ", " .. math.floor(Y) .. ", " .. math.floor(Z) .. ") in world \"" .. World:GetName() .. "\"")
+			Response = SendMessageSuccess(ActingPlayer,
+				"Set the spawn point of player \"" .. OtherPlayer:GetName() .. "\" to (" ..
+				math.floor(X) .. ", " .. math.floor(Y) .. ", " .. math.floor(Z) ..
+				") in world \"" .. World:GetName() .. "\""
+			)
 		end
 	end
 
