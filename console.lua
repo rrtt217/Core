@@ -1,6 +1,6 @@
 
 -- console.lua
--- luacheck: globals ParseCommandCoords GetOriginPosition cRoot
+-- luacheck: globals ParseCommandCoords cRoot
 
 -- Implements things related to console commands
 -- TODO: remove this file, migrate commands below to unified cmd_*.lua format
@@ -70,7 +70,7 @@ end
 
 
 
-function HandleConsoleTeleport(Split, _, _, Origin)
+function HandleConsoleTeleport(Split, _, _, _)
 	-- These locals must be declared before the closures below: a closure that assigns a name which the
 	-- enclosing scope declares *later* writes a global instead, and the outer read never sees it.
 	local IsPlayerOnline = false
@@ -112,15 +112,36 @@ function HandleConsoleTeleport(Split, _, _, Origin)
 		return true, "Player " .. Split[3] .." not found"
 
 	elseif (#Split == 5) then
-		local X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], GetOriginPosition(Origin))
-		if (X == nil) then
-			return true, Reason
-		end
-		PosX, PosY, PosZ = X, Y, Z
+		-- 1.12.2 /tp resolves "~" against the entity being teleported, not against the command source
+		-- (spec section 2.1b), so the target has to be found before the coordinates can be parsed:
+		local TargetFound = false
+		local ParseError = nil
+		local Destination = nil
 
-		cRoot:Get():FindAndDoWithPlayer(Split[2], TeleportToCoords)
+		local TeleportTarget = function(TargetPlayer)
+			if (TargetPlayer:GetName() ~= Split[2]) then
+				return
+			end
+			TargetFound = true
+
+			local X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], TargetPlayer:GetPosition())
+			if (X == nil) then
+				ParseError = Reason
+				return
+			end
+
+			TargetPlayer:TeleportToCoords(X, Y, Z)
+			IsPlayerOnline = true
+			Destination = "[X:" .. X .. " Y:" .. Y .. " Z:" .. Z .. "]"
+		end
+
+		cRoot:Get():FindAndDoWithPlayer(Split[2], TeleportTarget)
+
+		if (ParseError ~= nil) then
+			return true, ParseError
+		end
 		if (IsPlayerOnline) then
-			return true, "You teleported " .. Split[2] .. " to [X:" .. X .. " Y:" .. Y .. " Z:" .. Z .. "]"
+			return true, "You teleported " .. Split[2] .. " to " .. Destination
 		end
 		return true, "Player not found"
 

@@ -1,11 +1,11 @@
--- luacheck: globals ParseCommandCoords GetOriginPosition TeleportToPlayer
+-- luacheck: globals ParseCommandCoords TeleportToPlayer
 -- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess
 
 --- Handles the in-game /tp command.
--- The engine calls command handlers as (Split, Player, EntireCommand, Origin); a command block has no
--- player, and its origin carries the position relative coordinates resolve against:
--- specs/vanilla-1.12.2-command-coordinates.md
-function HandleTPCommand(a_Split, a_Player, _, a_Origin)
+-- 1.12.2 is special among the coordinate commands: /tp resolves "~" against the position of the entity
+-- being teleported, not against the command's execution position (that is /teleport, and what 1.13
+-- unified). See specs/vanilla-1.12.2-command-coordinates.md section 2.1b.
+function HandleTPCommand(a_Split, a_Player, _, _)
 
 	if #a_Split == 2 or #a_Split == 3 then
 
@@ -20,16 +20,17 @@ function HandleTPCommand(a_Split, a_Player, _, a_Origin)
 
 	elseif #a_Split == 4 then
 
-		-- Teleport to XYZ coords specified in a_Split[2, 3, 4]:
-		local X, Y, Z, Reason = ParseCommandCoords(a_Split[2], a_Split[3], a_Split[4], GetOriginPosition(a_Origin))
-		if (X == nil) then
-			return true, Reason
+		if (a_Player == nil) then
+			-- /tp without a target teleports the executor, and a command block has none (the exact
+			-- message still needs verifying, spec section 6.3):
+			return true, "No player was found to teleport"
 		end
 
-		if (a_Player == nil) then
-			-- Vanilla 1.12.2 /tp without a target teleports the executor, and a command block has none
-			-- (the exact message still needs verifying, spec section 6.3):
-			return true, "No player was found to teleport"
+		-- Teleport to XYZ coords specified in a_Split[2, 3, 4]. The base is the teleported entity
+		-- itself, which here is the executing player:
+		local X, Y, Z, Reason = ParseCommandCoords(a_Split[2], a_Split[3], a_Split[4], a_Player:GetPosition())
+		if (X == nil) then
+			return true, Reason
 		end
 
 		a_Player:TeleportToCoords( X, Y, Z )
