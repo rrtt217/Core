@@ -42,7 +42,8 @@ local function Check(a_Condition, a_Message)
 end
 
 local function CheckEquals(a_Actual, a_Expected, a_Message)
-	Check(a_Actual == a_Expected, string.format("%s (expected %s, got %s)", a_Message, tostring(a_Expected), tostring(a_Actual)))
+	local Detail = string.format("%s (expected %s, got %s)", a_Message, tostring(a_Expected), tostring(a_Actual))
+	Check(a_Actual == a_Expected, Detail)
 end
 
 
@@ -72,10 +73,10 @@ end
 
 cMonster =
 {
-	StringToMobType = function (a_Self, a_Name)
+	StringToMobType = function (_, a_Name)
 		return "type:" .. a_Name
 	end,
-	MobTypeToString = function (a_Self, a_Type)
+	MobTypeToString = function (_, a_Type)
 		return (a_Type:gsub("^type:", ""))
 	end,
 }
@@ -216,8 +217,9 @@ local function TestCommandBlockDefersOtherWorlds()
 	Check(Targets ~= nil, "the selector resolves: " .. tostring(Reason))
 	CheckEquals(Targets and #Targets or -1, 1, "the origin world's pawn is the only live candidate")
 	Check(Targets and Targets.Deferred ~= nil, "the other worlds are recorded for deferral")
-	CheckEquals(Targets and Targets.Deferred and #Targets.Deferred.Worlds or -1, 1, "exactly one other world")
-	CheckEquals(Targets and Targets.Deferred and Targets.Deferred.Worlds[1], "world_nether", "the other world is the nether")
+	local Deferred = Targets and Targets.Deferred
+	CheckEquals(Deferred and #Deferred.Worlds or -1, 1, "exactly one other world")
+	CheckEquals(Deferred and Deferred.Worlds[1], "world_nether", "the other world is the nether")
 	Check(Targets and Targets.Deferred and Targets.Deferred.Writable, "a command block's count can be corrected")
 
 	local Acted = {}
@@ -261,7 +263,8 @@ local function TestNoDeferralWhenDimensionBoundOrExecuted()
 	local Player = MakePawn(Overworld, 1, 64, 1)
 	Player.IsPlayer = function () return true end
 	Player.IsMob = function () return false end
-	local Executed = ResolveTargets("@e", { World = Overworld, Position = { x = 1, y = 64, z = 1 }, Executor = Player }, "entity")
+	local ExecutedContext = { World = Overworld, Position = { x = 1, y = 64, z = 1 }, Executor = Player }
+	local Executed = ResolveTargets("@e", ExecutedContext, "entity")
 	Check(Executed ~= nil, "the executor's selector resolves")
 	Check(Executed and Executed.Deferred == nil, "an executed command is not deferred")
 	ApplyToTargets(Executed, function () end)
@@ -303,11 +306,13 @@ local function TestEmptyOriginWorldStillQueues()
 	Overworld.Entities = {}
 	local Context = MakeCommandBlockContext()
 	local Targets, Reason = ResolveTargets("@e", Context, "entity")
-	Check(Targets ~= nil, "an empty origin world is not an error when other worlds are deferred: " .. tostring(Reason))
+	Check(Targets ~= nil, "an empty origin world is not an error when other worlds are deferred: " ..
+		tostring(Reason))
 	CheckEquals(Targets and #Targets or -1, 0, "no live targets")
 
 	local Acted = {}
-	CheckEquals(ApplyToTargets(Targets, function (a_Entity) table.insert(Acted, a_Entity) end), 0, "nothing happens immediately")
+	local Immediate = ApplyToTargets(Targets, function (a_Entity) table.insert(Acted, a_Entity) end)
+	CheckEquals(Immediate, 0, "nothing happens immediately")
 	RunQueuedTasks()
 	CheckEquals(#Acted, 1, "the deferred world was acted on")
 	CheckEquals(#WriteBacks, 1, "the count is still written back")
