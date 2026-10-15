@@ -72,6 +72,24 @@ g_PluginInfo =
 			},
 		},
 
+		["/execute"] = 
+		{
+			Permission = "core.execute",
+			Handler = HandleExecuteCommand,
+			HelpString = "Runs a command on behalf of another entity, from that entity's position.",
+			ParameterCombinations =
+			{
+				{
+					Params = "entity x y z command",
+					Help = "Runs the command as the selected entity, at the given position (~ is relative to it).",
+				},
+				{
+					Params = "entity x y z detect x2 y2 z2 block dataValue command",
+					Help = "Runs the command only when the block at x2 y2 z2 (relative to x y z) is the given block.",
+				},
+			},
+		},
+
 		["/give"] = 
 		{
 			Permission = "core.give",
@@ -450,6 +468,31 @@ g_PluginInfo =
 			Alias = "/msg",
 			Handler = HandleTellCommand,
 			HelpString = "Sends a private message to a player.",
+		},
+
+		["/testfor"] = 
+		{
+			Permission = "core.testfor",
+			Handler = HandleTestforCommand,
+			HelpString = "Counts the entities (player name or target selector) matching the given conditions.",
+		},
+
+		["/testforblock"] = 
+		{
+			Permission = "core.testforblock",
+			Handler = HandleTestforblockCommand,
+			HelpString = "Tests whether the block at the given position is the given block.",
+			ParameterCombinations =
+			{
+				{
+					Params = "x y z block",
+					Help = "Tests for the given block (name, e.g. minecraft:stone) at x y z, with any data value.",
+				},
+				{
+					Params = "x y z block dataValue",
+					Help = "Tests for the given block and data value (-1 matches any data value) at x y z.",
+				},
+			},
 		},
 
 		["/time"] = 
@@ -843,6 +886,12 @@ g_PluginInfo =
 			},
 		},
 
+		["execute"] = 
+		{
+			Handler = HandleConsoleExecute,
+			HelpString = "Runs a command on behalf of another entity, from that entity's position.",
+		},
+
 		["gamemode"] =
 		{
 			Handler =  HandleConsoleGamemode,
@@ -1124,6 +1173,18 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleSummon,
 			HelpString = "Summons an entity in the world.",
+		},
+
+		["testfor"] = 
+		{
+			Handler = HandleConsoleTestfor,
+			HelpString = "Counts the entities (player name or target selector) matching the given conditions.",
+		},
+
+		["testforblock"] = 
+		{
+			Handler = HandleConsoleTestforblock,
+			HelpString = "Tests whether the block at the given position is the given block.",
 		},
 
 		["time"] = 

@@ -42,7 +42,16 @@ scenario
 			"@e[type=!player]",
 			"@a[c=1]",
 			"@a[",
+			-- /execute and /testforblock arguments (relative coordinates, the detect form with its "-1" data
+			-- value, and a bare block name):
+			"~",
+			"~-1",
+			"detect",
+			"-1",
+			"stone",
 		},
-		maxLen = 1,  -- Max number of elements chosen from "choices"
+		-- /execute needs five arguments before its command body, so short argument lists can only reach its
+		-- usage message; six is the smallest length that reaches the real parsing:
+		maxLen = 6,  -- Max number of elements chosen from "choices"
 	},
 }
