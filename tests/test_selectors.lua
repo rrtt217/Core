@@ -405,6 +405,11 @@ local function TestResolver()
 		"player1,player2,type:cavespider,type:cow,type:creeper",
 		"r=-1 keeps the execution dimension"
 	)
+	CheckEquals(
+		NamesOf(ResolveToken("@e[rm=-1]")),
+		"player1,player2,type:cavespider,type:cow,type:creeper",
+		"rm=-1 behaves like r=-1 (maintainer's live 1.12.2 observation)"
+	)
 
 	-- x/y/z move the origin; x and z are centre-corrected, so x=2,z=2 means
 	-- (2.5, 2.5) and the creeper at (2, 2) is NOT at distance 0.

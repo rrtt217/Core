@@ -258,6 +258,12 @@ local function TestNoDeferralWhenDimensionBoundOrExecuted()
 	ApplyToTargets(Positioned, function () end)
 	CheckEquals(#QueuedTasks, 0, "nothing is queued for a position-based selector")
 
+	-- ... and so does a negative radius, which only restates the dimension restriction:
+	local NegativeRadius = ResolveTargets("@e[rm=-1]", MakeCommandBlockContext(), "entity")
+	Check(NegativeRadius ~= nil, "the negative-radius selector resolves")
+	Check(NegativeRadius and NegativeRadius.Deferred == nil, "a negative radius is not deferred")
+	CheckEquals(#QueuedTasks, 0, "nothing is queued for a negative radius")
+
 	-- A command with an executor defers the other worlds too, but has no command block whose count could
 	-- be corrected, and the queued action must not receive the executor (spec section 7.3):
 	local Player = MakePawn(Overworld, 1, 64, 1)

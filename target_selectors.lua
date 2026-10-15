@@ -430,14 +430,19 @@ local function MatchesSelectorArgument(a_Entity, a_Argument, a_OriginWorld, a_Bo
 		return MatchesLevelArgument(a_Entity, a_Argument, false)
 	elseif (Key == "lm") then
 		return MatchesLevelArgument(a_Entity, a_Argument, true)
-	elseif (Key == "r") then
+	elseif ((Key == "r") or (Key == "rm")) then
 		if (a_Argument.Number < 0) then
-			-- A negative radius means "same dimension, any distance" in 1.12.2.
+			-- A negative radius means "same dimension, any distance" in 1.12.2, in both arguments
+			-- (maintainer's live 1.12.2 observation, 2026-10-13; the wiki documents the r= wording and
+			-- the live run shows rm= behaves the same). The dimension half is what the whole argument
+			-- boils down to here, because SelectorNeedsOrigin() already keeps candidates inside the
+			-- origin world for both keys:
 			return (a_Entity:GetWorld() == a_OriginWorld)
 		end
 		-- Bound inclusivity is [待核]; inclusive is used here.
-		return (a_Distance ~= nil) and (a_Distance <= (a_Argument.Number * a_Argument.Number))
-	elseif (Key == "rm") then
+		if (Key == "r") then
+			return (a_Distance ~= nil) and (a_Distance <= (a_Argument.Number * a_Argument.Number))
+		end
 		return (a_Distance ~= nil) and (a_Distance >= (a_Argument.Number * a_Argument.Number))
 	elseif ((Key == "dx") or (Key == "dy") or (Key == "dz")) then
 		if (a_Box == nil) then
