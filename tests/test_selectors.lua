@@ -2,7 +2,7 @@
 --
 -- Table-driven tests for Core's target selector layer (target_selectors.lua).
 --
--- Verified specification: specs/vanilla-1.12.2-command-target-selectors.md
+-- Verified specification: specs/commands/vanilla-1.12.2-command-target-selectors.md
 -- (parent repository). The parser cases pin the 1.12.2 grammar, in particular the
 -- facts that 1.12.2 had no quoting, no spaces and no repeated arguments (those are
 -- 1.13+/17w45a additions).

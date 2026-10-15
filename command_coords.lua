@@ -1,6 +1,6 @@
 -- command_coords.lua
 -- Parses 1.12.2 command coordinates (absolute and relative "~") against a command origin.
--- Behaviour and sources: specs/vanilla-1.12.2-command-coordinates.md
+-- Behaviour and sources: specs/commands/vanilla-1.12.2-command-coordinates.md
 
 -- luacheck: globals GetOriginPosition ParseCommandCoord ParseCommandCoords
 

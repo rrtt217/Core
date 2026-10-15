@@ -3,7 +3,7 @@
 -- Table-driven tests for Core's 1.12.2 coordinate parsing, and for wiring the command origin into
 -- the target selector context.
 --
--- Verified specification: specs/vanilla-1.12.2-command-coordinates.md (parent repository).
+-- Verified specification: specs/commands/vanilla-1.12.2-command-coordinates.md (parent repository).
 -- The parser cases pin the 1.12.2 grammar: absolute coordinates, "~" relative to the execution
 -- position, and the fact that local coordinates "^" are a 1.13 (17w50a) addition which 1.12.2
 -- rejects - that case is the reason this file exists, because "^" is easy to "helpfully" implement.

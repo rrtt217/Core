@@ -5,7 +5,7 @@
 -- queued onto their own threads, and the command block's success count is written back once every other
 -- world has reported.
 --
--- Verified specification: specs/vanilla-1.12.2-command-coordinates.md sections 2.1c and 7 (parent
+-- Verified specification: specs/commands/vanilla-1.12.2-command-coordinates.md sections 2.1c and 7 (parent
 -- repository). The behaviour under test is the only way to keep vanilla's cross-dimension selectors
 -- while never taking another world's lock from plugin Lua.
 --

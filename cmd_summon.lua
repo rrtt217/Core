@@ -158,7 +158,7 @@ function HandleSummonCommand(Split, Player, _, Origin)
 		local World = cRoot:Get():GetDefaultWorld()
 
 		-- The command's execution position: a command block's own position, a player's feet. Relative
-		-- coordinates are resolved against it (specs/vanilla-1.12.2-command-coordinates.md):
+		-- coordinates are resolved against it (specs/commands/vanilla-1.12.2-command-coordinates.md):
 		local BasePosition = GetOriginPosition(Origin)
 		if (BasePosition == nil) and (Player ~= nil) then
 			BasePosition = Player:GetPosition()

@@ -10,7 +10,7 @@ function HandleSpawnPointCommand(Split, Player, _, Origin)
 	local World = cRoot:Get():GetDefaultWorld()
 
 	-- Relative coordinates resolve against the command's execution position (the origin), not against
-	-- the target player (specs/vanilla-1.12.2-command-coordinates.md):
+	-- the target player (specs/commands/vanilla-1.12.2-command-coordinates.md):
 	local BasePosition = GetOriginPosition(Origin)
 
 	if Player then

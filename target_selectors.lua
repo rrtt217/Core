@@ -2,7 +2,7 @@
 -- Implements the shared command target selector layer for Core, following
 -- vanilla Minecraft Java Edition 1.12.2 semantics (the pre-1.13 selector syntax).
 --
--- Clean-room sources (see specs/vanilla-1.12.2-command-target-selectors.md in the
+-- Clean-room sources (see specs/commands/vanilla-1.12.2-command-target-selectors.md in the
 -- parent repository for the full list):
 --   * "Commands", 1.12.2-era revision (rev 1152284, 2017-09-29):
 --     https://minecraft.wiki/w/Commands?oldid=1152284

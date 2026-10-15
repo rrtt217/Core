@@ -4,7 +4,7 @@
 --- Handles the in-game /tp command.
 -- 1.12.2 is special among the coordinate commands: /tp resolves "~" against the position of the entity
 -- being teleported, not against the command's execution position (that is /teleport, and what 1.13
--- unified). See specs/vanilla-1.12.2-command-coordinates.md section 2.1b.
+-- unified). See specs/commands/vanilla-1.12.2-command-coordinates.md section 2.1b.
 function HandleTPCommand(a_Split, a_Player, _, _)
 
 	if #a_Split == 2 or #a_Split == 3 then
