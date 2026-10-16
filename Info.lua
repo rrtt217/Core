@@ -514,6 +514,20 @@ g_PluginInfo =
 			HelpString = "Sends a private message to a player.",
 		},
 
+		["/tellraw"] =
+		{
+			Permission = "core.tellraw",
+			Handler = HandleTellrawCommand,
+			HelpString = "Sends a raw JSON text component to the given players (player name or target selector).",
+			ParameterCombinations =
+			{
+				{
+					Params = "player message",
+					Help = "Sends the JSON text component, for example {\"text\":\"Hi there!\",\"bold\":true}.",
+				},
+			},
+		},
+
 		["/testfor"] = 
 		{
 			Permission = "core.testfor",
@@ -1131,6 +1145,12 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleTell,
 			HelpString = "Sends a private message to a player.",
+		},
+
+		["tellraw"] =
+		{
+			Handler = HandleConsoleTellraw,
+			HelpString = "Sends a raw JSON text component to the given players (player name or target selector).",
 		},
 
 		["save-all"] =

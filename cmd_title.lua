@@ -5,6 +5,11 @@
 --   title <player> clear|reset
 -- Behaviour, sources and the known deviations: specs/commands/vanilla-1.12.2-presentation-commands.md
 --
+-- The text argument accepts both forms: a raw JSON text component (what 1.12.2 requires, and what the
+-- command_text.lua layer validates) and, as a convenience this fork adds, a plain string where "&" is a
+-- colour code. Which one is used follows from the text itself - an argument that starts with "{" or "[" is
+-- JSON, anything else is plain text.
+--
 -- The success count is the number of players the command reached, which is the convention Core's other
 -- target-based commands follow (a command block stores it as its SuccessCount).
 
@@ -13,8 +18,8 @@
 -- luacheck: ignore 131
 -- luacheck: new globals HandleTitleCommand HandleConsoleTitle
 -- luacheck: globals SendMessageFailure SendMessageSuccess ResolveTargets ApplyToTargets GetTargetName
--- luacheck: globals MakeSelectorContext ParseTitleLine
--- luacheck: globals cCompositeChat
+-- luacheck: globals MakeSelectorContext ParseTitleLine ParseTextArgument CheckChatDeliverable
+-- luacheck: globals cCompositeChat ctAboveActionBar
 
 -- The text each mode sets, and the verb that describes it, for the response message.
 local TITLE_ACTIONS =
@@ -27,30 +32,56 @@ local TITLE_ACTIONS =
 	reset     = { Verb = "Reset",   Object = "the title" },
 }
 
+-- The three modes that carry a text argument.
+local TEXT_MODES =
+{
+	title = true,
+	subtitle = true,
+	actionbar = true,
+}
+
 
 
 
 
 
 --- Applies one parsed /title action to one player.
-local function ApplyTitle(a_Client, a_Parse)
+-- a_Text is the parsed text argument ({ Kind = "json"|"plain", ... }) for the text modes, nil otherwise.
+local function ApplyTitle(a_Player, a_Parse, a_Text)
+	local Client = a_Player:GetClientHandle()
+	if (Client == nil) then
+		return
+	end
+
 	if (a_Parse.Mode == "times") then
 		-- The values are already clamped to at least 0 by the parser (1.12.2 treats a negative time as 0):
-		a_Client:SendTitleTimes(a_Parse.FadeIn, a_Parse.Stay, a_Parse.FadeOut)
+		Client:SendTitleTimes(a_Parse.FadeIn, a_Parse.Stay, a_Parse.FadeOut)
 	elseif (a_Parse.Mode == "clear") then
 		-- Protocol action 4: the title disappears, but its text is kept for the next SendTitleTimes() -
 		-- that is what separates "clear" from "reset":
-		a_Client:SendHideTitle()
+		Client:SendHideTitle()
 	elseif (a_Parse.Mode == "reset") then
 		-- Protocol action 5: the text is erased and the times are restored to their defaults:
-		a_Client:SendResetTitle()
+		Client:SendResetTitle()
 	elseif (a_Parse.Mode == "actionbar") then
-		a_Client:SendAboveActionBarMessage(a_Parse.Text)
+		-- The action bar goes through the chat packet, so a raw component is sent with the "above action bar"
+		-- chat type (the same thing the Title packet's action 2 does, per the 1.12.2 protocol notes):
+		if (a_Text.Kind == "json") then
+			a_Player:SendMessageRaw(a_Text.Json, ctAboveActionBar)
+		else
+			Client:SendAboveActionBarMessage(a_Text.Text)
+		end
 	elseif (a_Parse.Mode == "subtitle") then
-		-- cCompositeChat parses "&" colour codes and serialises to the JSON component SendSetTitle sends:
-		a_Client:SendSetSubTitle(cCompositeChat(a_Parse.Text))
+		if (a_Text.Kind == "json") then
+			Client:SendSetRawSubTitle(a_Text.Json)
+		else
+			-- cCompositeChat parses "&" colour codes and serialises to the JSON component that is sent:
+			Client:SendSetSubTitle(cCompositeChat(a_Text.Text))
+		end
+	elseif (a_Text.Kind == "json") then
+		Client:SendSetRawTitle(a_Text.Json)
 	else
-		a_Client:SendSetTitle(cCompositeChat(a_Parse.Text))
+		Client:SendSetTitle(cCompositeChat(a_Text.Text))
 	end
 end
 
@@ -59,10 +90,29 @@ end
 
 
 
-function HandleTitleCommand(Split, Player, _, Origin)
-	local Parse, Reason = ParseTitleLine(Split)
+function HandleTitleCommand(Split, Player, EntireCommand, Origin)
+	local Parse, Reason = ParseTitleLine(Split, EntireCommand)
 	if (Parse == nil) then
 		return true, SendMessageFailure(Player, Reason), 0
+	end
+
+	-- The text modes carry an argument that is either a JSON component or plain text; it is resolved once,
+	-- before anything runs, so that a bad component is reported without touching any player:
+	local Text = nil
+	if (TEXT_MODES[Parse.Mode]) then
+		local Argument, TextReason = ParseTextArgument(Parse.RawText, Parse.Text)
+		if (Argument == nil) then
+			return true, SendMessageFailure(Player, TextReason), 0
+		end
+
+		if (Parse.Mode == "actionbar") then
+			-- The action bar is sent through the chat packet, which drops a message containing "${":
+			local Deliverable = CheckChatDeliverable((Argument.Kind == "json") and Argument.Json or Argument.Text)
+			if (Deliverable ~= nil) then
+				return true, SendMessageFailure(Player, Deliverable), 0
+			end
+		end
+		Text = Argument
 	end
 
 	-- /title takes players only ("fails ... if player fails to evaluate to one or more online players"), so
@@ -76,11 +126,8 @@ function HandleTitleCommand(Split, Player, _, Origin)
 	local Affected = ApplyToTargets(
 		Targets,
 		function (a_Target)
-			local Client = a_Target:GetClientHandle()
-			if (Client ~= nil) then
-				ApplyTitle(Client, Parse)
-				ReachedName = GetTargetName(a_Target)
-			end
+			ApplyTitle(a_Target, Parse, Text)
+			ReachedName = GetTargetName(a_Target)
 		end
 	)
 

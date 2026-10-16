@@ -19,9 +19,9 @@
 -- can be exercised with a stock Lua interpreter (tests/test_presentation_commands.lua). Resolving a "~"
 -- coordinate against the command origin and touching game objects is the callers' job.
 
--- luacheck: new globals ParseTitleLine ParseParticleLine ParsePlaysoundLine
+-- luacheck: new globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine
 -- luacheck: new globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius
--- luacheck: globals ParseCommandCoord
+-- luacheck: globals ParseCommandCoord CutRawRemainder CheckTextComponent CheckChatDeliverable
 
 -- The 49 particle names 1.12.2 accepts, in the 1.12.2 spelling (camelCase names such as "mobSpell" are the
 -- ones the command used before 1.13 renamed them). The C++ lookup lowercases its input, so this list is
@@ -281,13 +281,37 @@ end
 
 
 
+--- Returns the raw remainder of the command line that starts at the a_ArgumentIndex-th argument.
+-- The engine drops the quotes it splits on, so a JSON text component can only be recovered from the raw
+-- command line (see command_text.lua). This returns nil whenever the raw line and the token list do not line
+-- up exactly - a run of spaces produces empty tokens that Arguments() drops, which shifts the indices - and
+-- the caller then falls back to the tokens it has.
+local function GetRawRemainder(a_Split, a_RawCommand, a_Args, a_ArgumentIndex)
+	if (a_RawCommand == nil) or (type(a_Split) ~= "table") then
+		return nil
+	end
+	if (#a_Args ~= (#a_Split - 1)) then
+		return nil
+	end
+	-- Arguments are the engine's tokens without the command name, so the token before argument i is token i;
+	-- cutting after it leaves exactly the arguments from i onwards:
+	return CutRawRemainder(a_Split, a_RawCommand, a_ArgumentIndex)
+end
+
+
+
+
+
+
 --- Parses a /title command line.
+-- a_RawCommand is the command as it was typed; it is only used to recover a JSON text component, which the
+-- engine's token splitter would otherwise have stripped of its quotes.
 -- Returns one of
---   { Mode = "title"|"subtitle"|"actionbar", Targets = <token>, Text = <text> }
+--   { Mode = "title"|"subtitle"|"actionbar", Targets = <token>, Text = <text>, RawText = <text>|nil }
 --   { Mode = "times", Targets = <token>, FadeIn = <int>, Stay = <int>, FadeOut = <int> }
 --   { Mode = "clear"|"reset", Targets = <token> }
 -- or nil plus a reason.
-function ParseTitleLine(a_Split)
+function ParseTitleLine(a_Split, a_RawCommand)
 	local Args = Arguments(a_Split)
 	local Usage = "Usage: " .. CommandName(a_Split, "title")
 		.. " <player> title|subtitle|actionbar <text> OR <player> times <fadeIn> <stay> <fadeOut>"
@@ -301,13 +325,20 @@ function ParseTitleLine(a_Split)
 	local Mode = Args[2]
 
 	if ((Mode == "title") or (Mode == "subtitle") or (Mode == "actionbar")) then
-		-- The text is everything that is left. vanilla takes a raw JSON text component here and consumes the
-		-- rest of the line; this fork renders a plain string, so the tokens are joined back with single
-		-- spaces and the result is parsed for "&" colour codes by cCompositeChat (spec section 2.1).
+		-- The text is everything that is left: vanilla takes a raw JSON text component here and consumes the
+		-- rest of the line. Both forms are returned - the tokens joined back with single spaces (the plain
+		-- text this fork accepts, rendered with "&" colour codes) and the raw remainder (which still has the
+		-- quotes a JSON component needs) - and the caller picks one (spec section 2.5).
 		if (#Args < 3) then
 			return nil, "No text was given"
 		end
-		return { Mode = Mode, Targets = Targets, Text = table.concat(Args, " ", 3) }
+		return
+		{
+			Mode = Mode,
+			Targets = Targets,
+			Text = table.concat(Args, " ", 3),
+			RawText = GetRawRemainder(a_Split, a_RawCommand, Args, 3),
+		}
 	end
 
 	if (Mode == "times") then
@@ -538,4 +569,42 @@ function ParsePlaysoundLine(a_Split)
 		Pitch = Pitch,
 		MinimumVolume = MinimumVolume,
 	}
+end
+
+
+
+
+
+
+--- Parses a /tellraw command line: tellraw <player> <raw json message>
+-- The message has to come from the raw command line: the engine's tokens have their quotes removed, so
+-- reassembling them would turn {"text":"Hi there"} into {text:Hi there}.
+-- Returns { Targets = <token>, Json = <json text> } or nil plus a reason.
+-- This is the one parser in this file that calls into the engine (cJson:Parse, through CheckTextComponent),
+-- because a /tellraw argument is only meaningful once it is known to be a component the client can render.
+function ParseTellrawLine(a_Split, a_RawCommand)
+	local Args = Arguments(a_Split)
+	local Usage = "Usage: " .. CommandName(a_Split, "tellraw") .. " <player> <raw json message>"
+
+	if (#Args < 1) then
+		return nil, Usage
+	end
+	if (#Args < 2) then
+		return nil, "No message was given"
+	end
+
+	local Json = GetRawRemainder(a_Split, a_RawCommand, Args, 2) or table.concat(Args, " ", 2)
+
+	local Reason = CheckTextComponent(Json)
+	if (Reason ~= nil) then
+		return nil, Reason
+	end
+
+	-- /tellraw always goes through the chat packet, which drops a message containing "${":
+	local Deliverable = CheckChatDeliverable(Json)
+	if (Deliverable ~= nil) then
+		return nil, Deliverable
+	end
+
+	return { Targets = Args[1], Json = Json }
 end

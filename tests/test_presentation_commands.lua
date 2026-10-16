@@ -1,17 +1,23 @@
 -- test_presentation_commands.lua
 --
--- Table-driven tests for Core's 1.12.2 presentation command parsers (/title, /particle, /playsound) and for
--- the two C++ backed whitelists they rely on.
+-- Table-driven tests for Core's 1.12.2 presentation and text commands (/title, /particle, /playsound,
+-- /tellraw): their argument parsers, the JSON text-component layer, and the two C++ backed whitelists the
+-- command layer relies on.
 --
 -- Verified specification: specs/commands/vanilla-1.12.2-presentation-commands.md (parent repository).
 -- The cases pin the 1.12.2 grammar that is easy to get wrong: the negative "times" values that are clamped
--- instead of refused, the optional count/speed tail of /particle, the required <source> of /playsound, and
--- the 1.13+ spellings (particle names such as "dust", the "ui" sound source, "^" local coordinates) that
+-- instead of refused, the optional count/speed tail of /particle, the required <source> of /playsound, the
+-- fact that a JSON component has to come from the raw command line (the engine's splitter strips the quotes),
+-- and the 1.13+ spellings (particle names such as "dust", the "ui" sound source, "^" local coordinates) that
 -- 1.12.2 must reject.
 --
 -- Invariants:
 --   * ParseTitleLine() / ParseParticleLine() / ParsePlaysoundLine() are pure functions of their token list:
 --     they never touch a world, a player or a C++ object, and malformed input yields a reason, not an error.
+--   * ParseTellrawLine() and CheckTextComponent() are the only ones that call into the engine, through
+--     cJson:Parse(); the tests replace cJson with a small parser of their own (below).
+--   * A text component that a 1.12.2 client cannot render on its own ("selector", "score") is refused rather
+--     than sent, because a client renders it as the selector text or as nothing at all.
 --   * Every particle name the C++ lookup knows is accepted, and every name it does not know is refused:
 --     cProtocol_1_8_0::GetProtocolParticleID() ASSERTS on an unknown name, which aborts an assert-enabled
 --     build, so this whitelist is a safety net and not just a message.
@@ -21,10 +27,14 @@
 
 local ScriptDir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 dofile(ScriptDir .. "/../command_coords.lua")
+dofile(ScriptDir .. "/../command_execute.lua")  -- SplitRawCommand(), the mirror of the engine's splitter
 dofile(ScriptDir .. "/../command_presentation.lua")
+dofile(ScriptDir .. "/../command_text.lua")
 
--- luacheck: globals ParseTitleLine ParseParticleLine ParsePlaysoundLine
+-- luacheck: globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine
 -- luacheck: globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius
+-- luacheck: globals CutRawRemainder CheckTextComponent ParseTextArgument CheckChatDeliverable
+-- luacheck: globals SplitRawCommand cJson
 
 local NumPassed = 0
 local NumFailed = 0
@@ -44,6 +54,143 @@ local function CheckEquals(a_Actual, a_Expected, a_Message)
 		string.format("%s (expected %s, got %s)", a_Message, tostring(a_Expected), tostring(a_Actual))
 	)
 end
+
+--- A minimal JSON parser standing in for the engine's cJson:Parse(), which wraps jsoncpp
+-- (src/Bindings/LuaJson.cpp). It is faithful for what these tests need: objects and arrays become tables,
+-- scalars become Lua values, a JSON null becomes plain nil, and malformed input returns nil plus a message.
+local JSON_NULL = setmetatable({}, { __tostring = function () return "null" end })
+
+local function SkipWhitespace(a_Text, a_Position)
+	while (a_Position <= #a_Text) and (a_Text:sub(a_Position, a_Position):match("%s") ~= nil) do
+		a_Position = a_Position + 1
+	end
+	return a_Position
+end
+
+local ParseJsonValue  -- forward declaration: ParseJsonValue() and the container parsers call each other
+
+local function ParseJsonString(a_Text, a_Position)
+	-- a_Position points at the opening quote:
+	local Result = {}
+	local Index = a_Position + 1
+	while (Index <= #a_Text) do
+		local Char = a_Text:sub(Index, Index)
+		if (Char == "\"") then
+			return table.concat(Result), Index + 1
+		end
+		if (Char == "\\") then
+			local Escape = a_Text:sub(Index + 1, Index + 1)
+			local Mapped = ({ ["n"] = "\n", ["t"] = "\t", ["r"] = "\r", ["b"] = "\b", ["f"] = "\f" })[Escape]
+			Result[#Result + 1] = Mapped or Escape
+			Index = Index + 2
+		else
+			Result[#Result + 1] = Char
+			Index = Index + 1
+		end
+	end
+	return nil, "unterminated string"
+end
+
+local function ParseJsonArray(a_Text, a_Position)
+	local Result = {}
+	local Index = SkipWhitespace(a_Text, a_Position + 1)
+	if (a_Text:sub(Index, Index) == "]") then
+		return Result, Index + 1
+	end
+	while true do
+		local Value, Next = ParseJsonValue(a_Text, Index)
+		if (Value == nil) then
+			return nil, Next
+		end
+		Result[#Result + 1] = Value
+		Index = SkipWhitespace(a_Text, Next)
+		local Char = a_Text:sub(Index, Index)
+		if (Char == "]") then
+			return Result, Index + 1
+		end
+		if (Char ~= ",") then
+			return nil, "expected ',' or ']'"
+		end
+		Index = SkipWhitespace(a_Text, Index + 1)
+	end
+end
+
+local function ParseJsonObject(a_Text, a_Position)
+	local Result = {}
+	local Index = SkipWhitespace(a_Text, a_Position + 1)
+	if (a_Text:sub(Index, Index) == "}") then
+		return Result, Index + 1
+	end
+	while true do
+		local Key, Next = ParseJsonString(a_Text, Index)
+		if (Key == nil) then
+			return nil, Next
+		end
+		Index = SkipWhitespace(a_Text, Next)
+		if (a_Text:sub(Index, Index) ~= ":") then
+			return nil, "expected ':'"
+		end
+		local Value, ValueNext = ParseJsonValue(a_Text, SkipWhitespace(a_Text, Index + 1))
+		if (Value == nil) then
+			return nil, ValueNext
+		end
+		Result[Key] = Value
+		Index = SkipWhitespace(a_Text, ValueNext)
+		local Char = a_Text:sub(Index, Index)
+		if (Char == "}") then
+			return Result, Index + 1
+		end
+		if (Char ~= ",") then
+			return nil, "expected ',' or '}'"
+		end
+		Index = SkipWhitespace(a_Text, Index + 1)
+	end
+end
+
+ParseJsonValue = function (a_Text, a_Position)
+	local Char = a_Text:sub(a_Position, a_Position)
+	if (Char == "{") then
+		return ParseJsonObject(a_Text, a_Position)
+	elseif (Char == "[") then
+		return ParseJsonArray(a_Text, a_Position)
+	elseif (Char == "\"") then
+		return ParseJsonString(a_Text, a_Position)
+	elseif (a_Text:sub(a_Position, a_Position + 3) == "true") then
+		return true, a_Position + 4
+	elseif (a_Text:sub(a_Position, a_Position + 4) == "false") then
+		return false, a_Position + 5
+	elseif (a_Text:sub(a_Position, a_Position + 3) == "null") then
+		return JSON_NULL, a_Position + 4
+	end
+
+	local Number = a_Text:match("^%-?%d+%.?%d*[eE]?[%+%-]?%d*", a_Position)
+	if (Number ~= nil) and (Number ~= "") then
+		return tonumber(Number), a_Position + #Number
+	end
+	return nil, "unexpected character '" .. Char .. "'"
+end
+
+cJson =
+{
+	Parse = function (a_Self, a_Text)
+		assert(a_Self == cJson, "cJson:Parse must be called with colon syntax")
+		if (type(a_Text) ~= "string") then
+			return nil, "Parsing Json failed: the input is not a string"
+		end
+
+		local Value, Next = ParseJsonValue(a_Text, SkipWhitespace(a_Text, 1))
+		if (Value == nil) then
+			return nil, "Parsing Json failed: " .. tostring(Next)
+		end
+		if (SkipWhitespace(a_Text, Next) <= #a_Text) then
+			return nil, "Parsing Json failed: trailing characters"
+		end
+		if (Value == JSON_NULL) then
+			return nil
+		end
+		return Value
+	end,
+}
 
 --- Checks that a call returns nil plus a reason that contains a_Snippet.
 local function CheckRefused(a_Call, a_Snippet, a_Message)
@@ -439,12 +586,201 @@ end
 
 
 
+local function TestRawRemainder()
+	-- The engine's token list has its quotes stripped; the raw remainder must not lose them, because a JSON
+	-- component is only valid with them:
+	CheckEquals(
+		CutRawRemainder({ "/tellraw", "@a", "{\"text\":\"Hi there\"}" }, "/tellraw @a {\"text\":\"Hi there\"}", 2),
+		"{\"text\":\"Hi there\"}",
+		"the JSON argument survives exactly as typed"
+	)
+	CheckEquals(
+		CutRawRemainder({ "/title", "@a", "title", "Hello", "world" }, "/title @a title Hello world", 3),
+		"Hello world",
+		"a multi-token plain text is cut out of the raw line"
+	)
+	-- A quoted argument keeps its quotes in the raw remainder (a JSON component needs them); the plain-text
+	-- form of the same argument comes from the tokens instead, so the quotes never reach the screen:
+	CheckEquals(
+		CutRawRemainder({ "/title", "@a", "title", "a  b" }, "/title @a title \"a  b\"", 3),
+		"\"a  b\"",
+		"the raw remainder keeps the quotes it was typed with"
+	)
+	local Quoted = ParseTextArgument(
+		CutRawRemainder({ "/title", "@a", "title", "a  b" }, "/title @a title \"a  b\"", 3),
+		"a  b"
+	)
+	Check(
+		(Quoted ~= nil) and (Quoted.Kind == "plain") and (Quoted.Text == "a  b"),
+		"a quoted plain text is rendered without its quotes"
+	)
+
+	-- Anything that does not line up with the token list must give up rather than cut the wrong text:
+	CheckEquals(CutRawRemainder({ "/title", "@a" }, "/title @a", 2), nil, "nothing left to cut")
+	CheckEquals(CutRawRemainder({ "/title", "@a", "title" }, "/title  @a title", 3), nil, "the token lists differ")
+	CheckEquals(CutRawRemainder({ "/title", "@a", "title" }, nil, 1), nil, "no raw command")
+	CheckEquals(CutRawRemainder(nil, "/title @a title x", 1), nil, "no token list")
+
+	-- A JSON title only survives when the raw command is available. The token list is what the engine really
+	-- produces for the raw line (StringSplitCommandLine removes the quotes it splits on):
+	local Split = { "/title", "@a", "title", "{text:Hi there}" }
+	local Parse = ParseTitleLine(Split, "/title @a title {\"text\":\"Hi there\"}")
+	Check(Parse ~= nil, "a JSON title parses")
+	if (Parse ~= nil) then
+		CheckEquals(Parse.RawText, "{\"text\":\"Hi there\"}", "the raw text is returned for a JSON component")
+		CheckEquals(Parse.Text, "{text:Hi there}", "the joined tokens are what the engine alone would give")
+		local Argument = ParseTextArgument(Parse.RawText, Parse.Text)
+		Check(
+			(Argument ~= nil) and (Argument.Kind == "json") and (Argument.Json == "{\"text\":\"Hi there\"}"),
+			"the raw form is the one that is sent"
+		)
+		-- Without the raw line the engine's mangled token is refused instead of being shown as literal text:
+		local Broken, BrokenReason = ParseTextArgument(nil, Parse.Text)
+		Check(
+			(Broken == nil) and (BrokenReason ~= nil) and (BrokenReason:find("Invalid JSON", 1, true) ~= nil),
+			"without the raw line a JSON argument is refused, not mangled"
+		)
+	end
+
+	Parse = ParseTitleLine({ "/title", "@a", "title", "Hi" })
+	Check((Parse ~= nil) and (Parse.RawText == nil), "without a raw command there is no raw text")
+end
+
+
+
+
+
+
+local function TestTextComponents()
+	-- What a 1.12.2 client can render on its own is accepted:
+	CheckEquals(CheckTextComponent("{\"text\":\"Hi there\",\"bold\":true}"), nil, "a plain text component is valid")
+	CheckEquals(CheckTextComponent("[\"a\",{\"text\":\"b\"}]"), nil, "an array of components is valid")
+	CheckEquals(
+		CheckTextComponent("{\"text\":\"a\",\"extra\":[{\"text\":\"b\",\"color\":\"red\"}]}"),
+		nil,
+		"a component with an extra list is valid"
+	)
+
+	-- Malformed JSON, and JSON that is not a component:
+	local Reason = CheckTextComponent("{\"text\":")
+	Check((Reason ~= nil) and (Reason:find("Invalid JSON", 1, true) ~= nil), "unparsable JSON is refused")
+	Reason = CheckTextComponent("42")
+	Check((Reason ~= nil) and (Reason:find("object or array", 1, true) ~= nil), "a JSON number is not a component")
+	Reason = CheckTextComponent("\"just a string\"")
+	Check((Reason ~= nil) and (Reason:find("object or array", 1, true) ~= nil), "a bare JSON string is not a component")
+	Reason = CheckTextComponent("null")
+	Check((Reason ~= nil) and (Reason:find("object or array", 1, true) ~= nil), "a JSON null is not a component")
+
+	-- The server-side components would render wrongly if they were sent unresolved:
+	Reason = CheckTextComponent("{\"selector\":\"@a\"}")
+	Check((Reason ~= nil) and (Reason:find("selector", 1, true) ~= nil), "the selector component is refused")
+	Reason = CheckTextComponent("{\"score\":{\"name\":\"*\",\"objective\":\"obj\"}}")
+	Check((Reason ~= nil) and (Reason:find("score", 1, true) ~= nil), "the score component is refused")
+	Reason = CheckTextComponent("{\"text\":\"a\",\"extra\":[{\"selector\":\"@p\"}]}")
+	Check((Reason ~= nil) and (Reason:find("selector", 1, true) ~= nil), "a nested selector component is refused")
+
+	-- A component that merely mentions the words is fine:
+	CheckEquals(CheckTextComponent("{\"text\":\"selector and score\"}"), nil, "the words inside a text are not components")
+
+	-- The chat packet refuses "${", so the command layer reports it instead of claiming a success:
+	CheckEquals(CheckChatDeliverable("{\"text\":\"hi\"}"), nil, "ordinary text is deliverable")
+	local Forbidden = CheckChatDeliverable("{\"text\":\"${jndi}\"}")
+	Check((Forbidden ~= nil) and (Forbidden:find("${", 1, true) ~= nil), "the ${ sequence is refused")
+
+	-- ParseTextArgument() picks the JSON form only for an argument that starts like JSON:
+	local Argument = ParseTextArgument("{\"text\":\"Hi\"}", "{text:Hi}")
+	Check(
+		(Argument ~= nil) and (Argument.Kind == "json") and (Argument.Json == "{\"text\":\"Hi\"}"),
+		"a JSON argument is used verbatim"
+	)
+	Argument = ParseTextArgument("Hello there", "Hello there")
+	Check((Argument ~= nil) and (Argument.Kind == "plain") and (Argument.Text == "Hello there"), "plain text stays plain")
+	-- A plain text whose raw form and token form differ keeps the token form, which is the readable one:
+	Argument = ParseTextArgument("Hello  there", "Hello there")
+	Check(
+		(Argument ~= nil) and (Argument.Kind == "plain") and (Argument.Text == "Hello there"),
+		"plain text uses the joined tokens"
+	)
+	-- Without a usable raw remainder the joined tokens are all there is:
+	Argument = ParseTextArgument(nil, "{\"text\":\"Hi\"}")
+	Check((Argument ~= nil) and (Argument.Kind == "json"), "the token form can still be JSON")
+	Argument = ParseTextArgument(nil, nil)
+	Check(Argument == nil, "no text at all is refused")
+end
+
+
+
+
+
+
+local function TestTellraw()
+	-- The message comes from the raw line, so its quotes survive:
+	local Parse = ParseTellrawLine(
+		{ "/tellraw", "@a", "{\"text\":\"Hi there\",\"color\":\"red\"}" },
+		"/tellraw @a {\"text\":\"Hi there\",\"color\":\"red\"}"
+	)
+	Check(Parse ~= nil, "a full /tellraw line parses")
+	if (Parse ~= nil) then
+		CheckEquals(Parse.Targets, "@a", "the target is kept")
+		CheckEquals(Parse.Json, "{\"text\":\"Hi there\",\"color\":\"red\"}", "the component is kept verbatim")
+	end
+
+	Parse = ParseTellrawLine({ "tellraw", "player1", "[\"a\",\"b\"]" }, "tellraw player1 [\"a\",\"b\"]")
+	Check((Parse ~= nil) and (Parse.Targets == "player1"), "the console spelling (no leading slash) parses too")
+
+	-- Refusals: a missing message, JSON that does not parse, a non-component, a server-side component, and
+	-- the sequence the chat packet would drop:
+	CheckRefused(
+		function () return ParseTellrawLine({ "/tellraw", "@a" }, "/tellraw @a") end,
+		"No message",
+		"a missing message"
+	)
+	CheckRefused(function () return ParseTellrawLine({ "/tellraw" }, "/tellraw") end, "Usage:", "a missing target")
+	CheckRefused(
+		function () return ParseTellrawLine({ "/tellraw", "@a", "{oops}" }, "/tellraw @a {oops}") end,
+		"Invalid JSON",
+		"malformed JSON"
+	)
+	CheckRefused(
+		function () return ParseTellrawLine({ "/tellraw", "@a", "42" }, "/tellraw @a 42") end,
+		"object or array",
+		"a JSON scalar"
+	)
+	CheckRefused(
+		function ()
+			return ParseTellrawLine({ "/tellraw", "@a", "{\"selector\":\"@a\"}" }, "/tellraw @a {\"selector\":\"@a\"}")
+		end,
+		"selector",
+		"the server-side selector component"
+	)
+	CheckRefused(
+		function ()
+			return ParseTellrawLine({ "/tellraw", "@a", "{\"text\":\"${x}\"}" }, "/tellraw @a {\"text\":\"${x}\"}")
+		end,
+		"${",
+		"a message the chat packet would drop"
+	)
+
+	-- Malformed input must not raise:
+	CheckNoCrash(function () return ParseTellrawLine(nil, nil) end, "a nil token list")
+	CheckNoCrash(function () return ParseTellrawLine({}, "") end, "an empty token list")
+	CheckNoCrash(function () return ParseTellrawLine({ "/tellraw", "", "" }, "/tellraw  ") end, "empty tokens")
+end
+
+
+
+
+
+
 TestParticleWhitelist()
 TestSoundSources()
 TestTitle()
 TestParticle()
 TestPlaysound()
 TestTitleGarbage()
+TestRawRemainder()
+TestTextComponents()
+TestTellraw()
 
 print(string.format("test_presentation_commands: %d passed, %d failed", NumPassed, NumFailed))
 if (NumFailed > 0) then
