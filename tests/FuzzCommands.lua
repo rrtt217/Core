@@ -49,6 +49,14 @@ scenario
 			"detect",
 			"-1",
 			"stone",
+			-- /title, /particle and /playsound arguments (the three subcommand spellings of /title, a valid
+			-- particle name, a valid sound source, and a sound event name):
+			"title",
+			"clear",
+			"particle",
+			"explode",
+			"master",
+			"mob.pig.say",
 		},
 		-- /execute needs five arguments before its command body, so short argument lists can only reach its
 		-- usage message; six is the smallest length that reaches the real parsing:

@@ -290,11 +290,55 @@ g_PluginInfo =
 			HelpString = "Add a player to the administrator rank.",
 		},
 
+		["/particle"] =
+		{
+			Permission = "core.particle",
+			Handler = HandleParticleCommand,
+			HelpString = "Creates particles at the given position.",
+			ParameterCombinations =
+			{
+				{
+					Params = "name x y z xd yd zd speed",
+					Help = "Creates the named particle at the given position, with the given spread and speed.",
+				},
+				{
+					Params = "name x y z xd yd zd speed count",
+					Help = "Creates the given number of particles (0 creates a single particle).",
+				},
+				{
+					Params = "name x y z xd yd zd speed count normal|force",
+					Help = "Also sets the display mode, normal or force.",
+				},
+			},
+		},
+
 		["/players"] =
 		{
 			Permission = "core.players",
 			Handler =  HandlePlayersCommand,
 			HelpString = "Shows a list of all connected players.",
+		},
+
+		["/playsound"] =
+		{
+			Permission = "core.playsound",
+			Handler = HandlePlaysoundCommand,
+			HelpString = "Plays a sound for the given players (player name or target selector).",
+			ParameterCombinations =
+			{
+				{
+					Params = "sound source player",
+					Help = "Plays the sound at the player's own position.",
+				},
+				{
+					Params = "sound source player x y z",
+					Help = "Plays the sound from the given position (~ is relative to the command).",
+				},
+				{
+					Params = "sound source player x y z volume pitch minimumVolume",
+					Help = "Also sets the volume, the pitch, and the volume heard by players out of range.",
+				},
+			},
 		},
 
 		["/regen"] =
@@ -607,6 +651,32 @@ g_PluginInfo =
 							},
 						},
 					},
+				},
+			},
+		},
+
+		["/title"] =
+		{
+			Permission = "core.title",
+			Handler = HandleTitleCommand,
+			HelpString = "Controls the screen title shown to the given players (player name or target selector).",
+			ParameterCombinations =
+			{
+				{
+					Params = "player title|subtitle|actionbar text",
+					Help = "Sets the title, the subtitle or the action bar text ('&' colour codes are supported).",
+				},
+				{
+					Params = "player times fadeIn stay fadeOut",
+					Help = "Sets the fade in, stay and fade out times, in game ticks.",
+				},
+				{
+					Params = "player clear",
+					Help = "Removes the title from the screen (the text is kept).",
+				},
+				{
+					Params = "player reset",
+					Help = "Clears the text and restores the default times.",
 				},
 			},
 		},
@@ -985,10 +1055,22 @@ g_PluginInfo =
 			HelpString = "Shows number of chunks currently loaded.",
 		},
 
+		["particle"] =
+		{
+			Handler = HandleConsoleParticle,
+			HelpString = "Creates particles at the given position.",
+		},
+
 		["players"] =
 		{
 			Handler =  HandleConsolePlayers,
 			HelpString = "Shows a list of all connected players.",
+		},
+
+		["playsound"] =
+		{
+			Handler = HandleConsolePlaysound,
+			HelpString = "Plays a sound for the given players (player name or target selector).",
 		},
 
 		["plugins"] =
@@ -1295,6 +1377,12 @@ g_PluginInfo =
 					},
 				},
 			},
+		},
+
+		["title"] =
+		{
+			Handler = HandleConsoleTitle,
+			HelpString = "Controls the screen title shown to the given players (player name or target selector).",
 		},
 
 		["toggledownfall"] =
