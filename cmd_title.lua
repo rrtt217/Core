@@ -69,7 +69,9 @@ local function ApplyTitle(a_Player, a_Parse, a_Text)
 		if (a_Text.Kind == "json") then
 			a_Player:SendMessageRaw(a_Text.Json, ctAboveActionBar)
 		else
-			Client:SendAboveActionBarMessage(a_Text.Text)
+			-- SendAboveActionBarMessage() is a cPlayer method (the client handle spells the same chat packet
+			-- SendChatAboveActionBar()), so this one must not go through Client:
+			a_Player:SendAboveActionBarMessage(a_Text.Text)
 		end
 	elseif (a_Parse.Mode == "subtitle") then
 		if (a_Text.Kind == "json") then
