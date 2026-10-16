@@ -485,6 +485,28 @@ g_PluginInfo =
 			HelpString = "Sets the spawn point for a player.",
 		},
 
+		["/stopsound"] =
+		{
+			Permission = "core.stopsound",
+			Handler = HandleStopsoundCommand,
+			HelpString = "Stops sounds for the given players (player name or target selector).",
+			ParameterCombinations =
+			{
+				{
+					Params = "player",
+					Help = "Stops every sound the players can hear.",
+				},
+				{
+					Params = "player source",
+					Help = "Stops the sounds of one category (master, music, record, weather, block, hostile, neutral, player, ambient, voice).",
+				},
+				{
+					Params = "player source sound",
+					Help = "Stops one sound event, for example minecraft:weather.rain.",
+				},
+			},
+		},
+
 		["/stop"] = 
 		{
 			Permission = "core.stop",
@@ -1269,6 +1291,12 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleSpawn,
 			HelpString = "Returns a player to the spawn point.",
+		},
+
+		["stopsound"] =
+		{
+			Handler = HandleConsoleStopsound,
+			HelpString = "Stops sounds for the given players (player name or target selector).",
 		},
 
 		["summon"] = 

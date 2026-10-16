@@ -31,8 +31,8 @@ dofile(ScriptDir .. "/../command_execute.lua")  -- SplitRawCommand(), the mirror
 dofile(ScriptDir .. "/../command_presentation.lua")
 dofile(ScriptDir .. "/../command_text.lua")
 
--- luacheck: globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine
--- luacheck: globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius
+-- luacheck: globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine ParseStopsoundLine
+-- luacheck: globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius BuildStopSoundPayload
 -- luacheck: globals CutRawRemainder CheckTextComponent ParseTextArgument CheckChatDeliverable
 -- luacheck: globals SplitRawCommand cJson
 
@@ -586,6 +586,73 @@ end
 
 
 
+local function TestStopsound()
+	-- The payload 1.12.2 sends on the "MC|StopSound" channel. The reference bytes come from a ProtoProxy
+	-- capture of a vanilla 1.12.2 server: "/stopsound Harry00025 weather minecraft:weather.rain" made it
+	-- send 0x18 (Plugin Message) with channel "MC|StopSound" and the payload
+	-- 07 "weather" 16 "minecraft:weather.rain" - the category first, then the sound event.
+	CheckEquals(
+		BuildStopSoundPayload("weather", "minecraft:weather.rain"),
+		"\7weather\22minecraft:weather.rain",
+		"the captured payload is reproduced byte for byte"
+	)
+
+	-- One string (or none) means "everything" for the part that is missing:
+	CheckEquals(BuildStopSoundPayload("weather", nil), "\7weather", "a category alone sends one string")
+	CheckEquals(BuildStopSoundPayload(nil, nil), "", "no argument at all sends an empty payload")
+
+	-- The length prefix is a VarInt, so a long sound name still encodes correctly:
+	local LongName = string.rep("a", 200)
+	local LongPayload = BuildStopSoundPayload(nil, LongName)
+	CheckEquals(LongPayload:sub(1, 2), "\200\1", "a length above 127 uses two VarInt bytes")
+	CheckEquals(LongPayload:sub(3), LongName, "the name itself is written unchanged")
+
+	-- Parsing:
+	local Parse = ParseStopsoundLine({ "/stopsound", "Harry00025", "weather", "minecraft:weather.rain" })
+	Check(Parse ~= nil, "the captured command line parses")
+	if (Parse ~= nil) then
+		CheckEquals(Parse.Targets, "Harry00025", "the target is kept")
+		CheckEquals(Parse.Source, "weather", "the category is kept")
+		CheckEquals(Parse.Sound, "minecraft:weather.rain", "the sound is kept verbatim")
+	end
+
+	Parse = ParseStopsoundLine({ "stopsound", "@a" })
+	Check((Parse ~= nil) and (Parse.Source == nil) and (Parse.Sound == nil), "a bare target parses")
+	Parse = ParseStopsoundLine({ "stopsound", "@a", "record" })
+	Check((Parse ~= nil) and (Parse.Source == "record") and (Parse.Sound == nil), "a category without a sound parses")
+
+	CheckRefused(function () return ParseStopsoundLine({ "/stopsound" }) end, "Usage:", "a missing target")
+	CheckRefused(
+		function () return ParseStopsoundLine({ "/stopsound", "@a", "ui" }) end,
+		"Unknown sound source",
+		"the 1.21.6 ui category"
+	)
+	CheckRefused(
+		function () return ParseStopsoundLine({ "/stopsound", "@a", "master", "not a sound" }) end,
+		"Invalid sound",
+		"a single token that is not shaped like a sound name"
+	)
+	-- The engine would split that into separate tokens, so the real line is refused as an extra argument:
+	CheckRefused(
+		function () return ParseStopsoundLine({ "/stopsound", "@a", "master", "not", "a", "sound" }) end,
+		"Unexpected argument",
+		"a sound name typed with spaces"
+	)
+	CheckRefused(
+		function () return ParseStopsoundLine({ "/stopsound", "@a", "master", "one", "extra" }) end,
+		"Unexpected argument",
+		"a fourth argument"
+	)
+
+	CheckNoCrash(function () return ParseStopsoundLine(nil) end, "a nil token list")
+	CheckNoCrash(function () return ParseStopsoundLine({}) end, "an empty token list")
+end
+
+
+
+
+
+
 local function TestRawRemainder()
 	-- The engine's token list has its quotes stripped; the raw remainder must not lose them, because a JSON
 	-- component is only valid with them:
@@ -781,6 +848,7 @@ TestTitleGarbage()
 TestRawRemainder()
 TestTextComponents()
 TestTellraw()
+TestStopsound()
 
 print(string.format("test_presentation_commands: %d passed, %d failed", NumPassed, NumFailed))
 if (NumFailed > 0) then

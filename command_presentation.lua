@@ -19,8 +19,8 @@
 -- can be exercised with a stock Lua interpreter (tests/test_presentation_commands.lua). Resolving a "~"
 -- coordinate against the command origin and touching game objects is the callers' job.
 
--- luacheck: new globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine
--- luacheck: new globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius
+-- luacheck: new globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine ParseStopsoundLine
+-- luacheck: new globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius BuildStopSoundPayload
 -- luacheck: globals ParseCommandCoord CutRawRemainder CheckTextComponent CheckChatDeliverable
 
 -- The 49 particle names 1.12.2 accepts, in the 1.12.2 spelling (camelCase names such as "mobSpell" are the
@@ -607,4 +607,87 @@ function ParseTellrawLine(a_Split, a_RawCommand)
 	end
 
 	return { Targets = Args[1], Json = Json }
+end
+
+
+
+
+
+
+--- Returns a_Value encoded the way the protocol writes a VarInt (7 bits per byte, high bit = "more").
+local function EncodeVarInt(a_Value)
+	local Bytes = {}
+	local Remaining = a_Value
+	repeat
+		local Byte = Remaining % 128
+		Remaining = math.floor(Remaining / 128)
+		if (Remaining > 0) then
+			Byte = Byte + 128
+		end
+		Bytes[#Bytes + 1] = string.char(Byte)
+	until (Remaining <= 0)
+	return table.concat(Bytes)
+end
+
+
+
+
+
+
+--- Builds the payload of the "MC|StopSound" plugin message, which is how 1.12.2 implements /stopsound.
+-- The client parses it as zero, one or two length-prefixed strings, in this order: the sound category, then
+-- the sound event. An omitted string means "every..." for that part, so an empty payload stops everything.
+-- The two-string form is verified byte-for-byte against a ProtoProxy capture of a vanilla 1.12.2 server
+-- (`/stopsound Harry00025 weather minecraft:weather.rain` produced 07 "weather" 16 "minecraft:weather.rain");
+-- the zero- and one-string forms follow from the client's parsing and from the 1.13 Stop Sound packet, whose
+-- flags cover the same three cases - see the spec's deviations.
+function BuildStopSoundPayload(a_Source, a_Sound)
+	local Payload = ""
+	if (a_Source ~= nil) then
+		Payload = Payload .. EncodeVarInt(#a_Source) .. a_Source
+	end
+	if (a_Sound ~= nil) then
+		Payload = Payload .. EncodeVarInt(#a_Sound) .. a_Sound
+	end
+	return Payload
+end
+
+
+
+
+
+
+--- Parses a /stopsound command line: stopsound <player> [source] [sound]
+-- Returns { Targets = <token>, Source = <category>|nil, Sound = <sound event>|nil } or nil plus a reason.
+-- The sound name is passed through exactly as typed: the capture that pinned this command down shows a
+-- namespaced name reaching the client unchanged, and nothing in the allowed sources says a bare name is
+-- expanded to "minecraft:..." first (spec section 2.4).
+function ParseStopsoundLine(a_Split)
+	local Args = Arguments(a_Split)
+	local Usage = "Usage: " .. CommandName(a_Split, "stopsound") .. " <player> [source] [sound]"
+
+	if (#Args < 1) then
+		return nil, Usage
+	end
+	if (#Args > 3) then
+		return nil, "Unexpected argument \"" .. Args[4] .. "\""
+	end
+
+	local Source = nil
+	if (Args[2] ~= nil) then
+		if (not IsKnownSoundSource(Args[2])) then
+			return nil, "Unknown sound source \"" .. Args[2] .. "\""
+		end
+		Source = Args[2]
+	end
+
+	local Sound = nil
+	if (Args[3] ~= nil) then
+		if (not IsSoundName(Args[3])) then
+			return nil, "Invalid sound \"" .. Args[3] .. "\""
+		end
+		Sound = Args[3]
+	end
+
+	return { Targets = Args[1], Source = Source, Sound = Sound }
 end

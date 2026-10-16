@@ -61,6 +61,10 @@ scenario
 			"tellraw",
 			"{\"text\":\"hi\"}",
 			"{\"text\":",
+			-- /stopsound arguments (an empty payload, a category only, and the captured category + sound):
+			"stopsound",
+			"weather",
+			"minecraft:weather.rain",
 		},
 		-- /execute needs five arguments before its command body, so short argument lists can only reach its
 		-- usage message; six is the smallest length that reaches the real parsing:
