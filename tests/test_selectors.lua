@@ -14,10 +14,6 @@
 --
 -- Run with:  lua tests/test_selectors.lua   (from the plugin folder)
 
--- The stubs below stand in for engine globals that the module under test reads, so luacheck counts
--- them as unused in this file (131 == "unused global variable").
--- luacheck: ignore 131
-
 if (arg == nil) or (arg[0] == nil) or (arg[0]:find("test_selectors") == nil) then
 	return
 end
@@ -27,8 +23,9 @@ local ScriptDir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 -- Entity-name constants the shared lookup reads while it loads (entity_names.lua). Their values are opaque
 -- here: the tests only check that both sides compare the same sentinel.
 mtInvalidType = "mtInvalidType"
--- The entity types live on the cEntity class table (tolua registers them inside that module); a bare global
--- would be nil in the real server, which is exactly the bug this stub shape rules out.
+-- The entity types are constants of the cEntity class table (tolua registers them inside that module), not
+-- globals: this mirrors the path entity_names.lua has to use, so a bare "etTNT" (nil in the real server)
+-- cannot slip through.
 cEntity =
 {
 	etEntity = "etEntity", etEnderCrystal = "etEnderCrystal", etPlayer = "etPlayer",
@@ -50,11 +47,12 @@ cProjectileEntity =
 dofile(ScriptDir .. "/../entity_names.lua")
 dofile(ScriptDir .. "/../target_selectors.lua")
 
--- luacheck: new globals cRoot cBoundingBox Vector3d cMonster
--- luacheck: read globals ParseSelector ResolveSelectorToken ResolveTargets GetTargetName ApplyToTargets
+-- luacheck: new globals cRoot cBoundingBox Vector3d cMonster cEntity
+-- luacheck: read globals ParseSelector ResolveSelectorToken ResolveTargets GetTargetName ApplyToTargets cEntity
 -- luacheck: read globals GetEntityInfo mtInvalidType cEntity
--- luacheck: read globals etMinecart etProjectile E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART
--- luacheck: read globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT cProjectileEntity
+-- luacheck: read globals cEntity
+-- luacheck: read globals E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART cEntity
+-- luacheck: read globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT cProjectileEntity cEntity
 
 local NumPassed = 0
 local NumFailed = 0
@@ -263,6 +261,7 @@ local function MakePlayer(a_Name, a_World, a_X, a_Y, a_Z, a_Properties)
 	Entity.IsGameModeCreative = function (a_Self) return a_Self.GameMode == "creative" end
 	Entity.IsGameModeAdventure = function (a_Self) return a_Self.GameMode == "adventure" end
 	Entity.IsGameModeSpectator = function (a_Self) return a_Self.GameMode == "spectator" end
+	Entity.GetEntityType = function () return cEntity.etPlayer end
 	return Entity
 end
 
@@ -275,6 +274,19 @@ local function MakeMob(a_MobType, a_World, a_X, a_Y, a_Z, a_CustomName)
 	Entity.IsPawn = function () return true end
 	Entity.GetMobType = function (a_Self) return a_Self.MobType end
 	Entity.GetCustomName = function (a_Self) return a_Self.CustomName end
+	Entity.GetEntityType = function () return cEntity.etMonster end
+	return Entity
+end
+
+--- An entity that is neither a mob nor a player: a dropped item, a minecart, a projectile ...
+local function MakeNonPawn(a_Label, a_EntityType, a_World, a_X, a_Y, a_Z)
+	local Entity = BaseEntity(a_World, a_X, a_Y, a_Z)
+	Entity.Label = a_Label
+	Entity.EntityType = a_EntityType
+	Entity.IsPlayer = function () return false end
+	Entity.IsMob = function () return false end
+	Entity.IsPawn = function () return false end
+	Entity.GetEntityType = function (a_Self) return a_Self.EntityType end
 	return Entity
 end
 
@@ -388,6 +400,71 @@ local function ResolveToken(a_Token)
 	local Entities, Reason = ResolveSelectorToken(a_Token, Context)
 	Check(Reason == nil, "Resolving " .. a_Token .. " should succeed (got " .. tostring(Reason) .. ")")
 	return Entities or {}
+end
+
+--- "@e" covers every entity, and the command's own kind is what narrows it again.
+local function TestAllEntities()
+	local World = MakeWorld("entity-world", {})
+	local Player = MakePlayer("steve", World, 0, 64, 0)
+	local Cow = MakeMob("cow", World, 2, 64, 0)
+	local Pickup = MakeNonPawn("item", cEntity.etPickup, World, 1, 64, 0)
+	local Cart = MakeNonPawn("minecart", cEntity.etMinecart, World, 3, 64, 0)
+	World.Entities = { Player, Cow, Pickup, Cart }
+
+	-- LocalOnly keeps the deferral out of this test: one world, resolved inline.
+	local Context = { World = World, Position = { x = 0, y = 64, z = 0 }, Executor = Player, LocalOnly = true }
+
+	local function NameOf(a_Entity)
+		if (a_Entity.Label ~= nil) then
+			return a_Entity.Label
+		end
+		if (a_Entity:IsPlayer()) then
+			return a_Entity:GetName()
+		end
+		return a_Entity:GetMobType()
+	end
+
+	local function Names(a_Entities)
+		local Result = {}
+		for _, Entity in ipairs(a_Entities) do
+			Result[#Result + 1] = NameOf(Entity)
+		end
+		table.sort(Result)
+		return table.concat(Result, ",")
+	end
+
+	local function Resolved(a_Token)
+		local Entities, Reason = ResolveSelectorToken(a_Token, Context)
+		Check(Reason == nil, "resolving " .. a_Token .. " succeeds (got " .. tostring(Reason) .. ")")
+		return Names(Entities or {})
+	end
+
+	-- The selector itself now yields everything, players included:
+	CheckEquals(Resolved("@e"), "item,minecart,steve,type:cow", "@e is every entity of the origin world")
+
+	-- ... and the command's kind narrows it, which is what keeps /effect on living targets:
+	local function KindNames(a_Kind)
+		local Targets, Reason = ResolveTargets("@e", Context, a_Kind)
+		Check(Reason == nil, "resolving @e as " .. tostring(a_Kind) .. " succeeds")
+		return Names(Targets or {})
+	end
+	CheckEquals(KindNames("pawn"), "steve,type:cow", "a pawn consumer still gets only players and mobs")
+	CheckEquals(KindNames("player"), "steve", "a player consumer still gets only players")
+	CheckEquals(KindNames("entity"), "item,minecart,steve,type:cow", "an entity consumer gets everything")
+
+	-- type= names the non-mob entities, as long as entity_names.lua knows the id:
+	CheckEquals(Resolved("@e[type=item]"), "item", "@e[type=item] finds the dropped item")
+	CheckEquals(Resolved("@e[type=minecart]"), "minecart", "@e[type=minecart] finds the minecart")
+	CheckEquals(Resolved("@e[type=!item]"), "minecart,steve,type:cow", "negation drops it again")
+
+	-- An id nothing is called by matches nothing; it is not an error:
+	CheckEquals(Resolved("@e[type=elder_guardian]"), "", "an unknown id matches nothing")
+
+	-- @p/@r with type= switch from players to entities, as they always claimed to:
+	CheckEquals(Resolved("@p[type=item]"), "item", "@p[type=item] is the nearest dropped item")
+
+	-- @a is untouched:
+	CheckEquals(Resolved("@a"), "steve", "@a stays players-only")
 end
 
 local function TestResolver()
@@ -612,6 +689,7 @@ end
 
 BuildUniverse()
 TestParser()
+TestAllEntities()
 TestResolver()
 TestTargets()
 TestApply()

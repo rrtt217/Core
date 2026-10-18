@@ -26,9 +26,9 @@ local ScriptDir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 -- Engine constants entity_names.lua reads while it loads. The values are opaque sentinels: the tests compare
 -- them for identity, they never need the numbers.
 mtInvalidType = "mtInvalidType"
--- The entity types are constants of the cEntity class table, not globals: tolua registers them inside the
--- cEntity module, so entity_names.lua has to read cEntity.etTNT and friends. The stub mirrors that path,
--- which is what keeps a bare "etTNT" (nil in the real server) from passing unnoticed.
+-- The entity types are constants of the cEntity class table (tolua registers them inside that module), not
+-- globals: this mirrors the path entity_names.lua has to use, so a bare "etTNT" (nil in the real server)
+-- cannot slip through.
 cEntity =
 {
 	etEntity = "etEntity", etEnderCrystal = "etEnderCrystal", etPlayer = "etPlayer",
@@ -83,9 +83,10 @@ cMonster =
 dofile(ScriptDir .. "/../entity_names.lua")
 
 -- luacheck: new globals cMonster mtInvalidType cEntity
--- luacheck: new globals etProjectile E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART
--- luacheck: new globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT cProjectileEntity
--- luacheck: read globals GetEntityInfo
+-- luacheck: new globals cEntity
+-- luacheck: new globals E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART cEntity
+-- luacheck: new globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT cProjectileEntity cEntity
+-- luacheck: read globals GetEntityInfo cEntity
 
 local NumPassed = 0
 local NumFailed = 0
@@ -160,6 +161,13 @@ local function TestNonMobEntities()
 		{ "snowball",       "projectile",     cEntity.etProjectile },
 		{ "wither_skull",   "projectile",     cEntity.etProjectile },
 		{ "xp_bottle",      "projectile",     cEntity.etProjectile },
+		-- Selectable but not creatable: the entity type exists, Core cannot make one.
+		{ "item",              "selector_only", cEntity.etPickup },
+		{ "item_frame",        "selector_only", cEntity.etItemFrame },
+		{ "painting",          "selector_only", cEntity.etPainting },
+		{ "leash_knot",        "selector_only", cEntity.etLeashKnot },
+		{ "area_effect_cloud", "selector_only", cEntity.etAreaEffectCloud },
+		{ "eye_of_ender",      "selector_only", cEntity.etFloater },
 	}
 
 	for _, Case in ipairs(CASES) do
@@ -196,7 +204,8 @@ end
 local function TestUnknownAndOldSpellings()
 	-- Nothing in the engine's table, nothing in the non-mob table:
 	CheckEquals(GetEntityInfo("elder_guardian"), nil, "an id Core cannot create is not an entity")
-	CheckEquals(GetEntityInfo("item"), nil, "so is a dropped item")
+	-- "item" itself is in the table now (selector-only); an entity Cuberite has no class for is not:
+	CheckEquals(GetEntityInfo("armor_stand"), nil, "an entity type Cuberite lacks is not an entity here")
 	CheckEquals(GetEntityInfo("minecraft:tnt"), nil, "entity ids are not namespaced in 1.12.2 commands")
 
 	-- The pre-1.11 spellings only /summon's old table knew are gone with that table:

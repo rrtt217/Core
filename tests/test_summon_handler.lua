@@ -17,16 +17,17 @@
 --
 -- Run with:  lua tests/test_summon_handler.lua   (from the plugin folder)
 
--- The stubs below stand in for engine globals that the module under test reads, so luacheck counts
--- them as unused in this file (131 == "unused global variable").
+-- The fakes below stand in for engine globals that cmd_summon.lua reads, so luacheck counts them as unused
+-- in this file (131 == "unused global variable").
 -- luacheck: ignore 131
 
 local ScriptDir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 
 -- Engine constants read while entity_names.lua loads.
 mtInvalidType = "mtInvalidType"
--- The entity types live on the cEntity class table (tolua registers them inside that module), which is where
--- entity_names.lua reads them from; a bare global would be nil in the real server.
+-- The entity types are constants of the cEntity class table (tolua registers them inside that module), not
+-- globals: this mirrors the path entity_names.lua has to use, so a bare "etTNT" (nil in the real server)
+-- cannot slip through.
 cEntity =
 {
 	etEntity = "etEntity", etEnderCrystal = "etEnderCrystal", etPlayer = "etPlayer",
@@ -76,10 +77,11 @@ dofile(ScriptDir .. "/../entity_names.lua")
 dofile(ScriptDir .. "/../cmd_summon.lua")
 
 -- luacheck: new globals cMonster mtInvalidType cEntity
--- luacheck: new globals E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART
--- luacheck: new globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT E_BLOCK_SAND cProjectileEntity
--- luacheck: new globals cBoat Vector3d Vector3i cItem cRoot SendMessage SendMessageSuccess SendMessageFailure
--- luacheck: read globals HandleSummonCommand
+-- luacheck: new globals cEntity
+-- luacheck: new globals E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART cEntity
+-- luacheck: new globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT E_BLOCK_SAND cProjectileEntity cEntity
+-- luacheck: new globals cBoat Vector3d Vector3i cItem cRoot SendMessage SendMessageSuccess SendMessageFailure cEntity
+-- luacheck: read globals HandleSummonCommand cEntity
 
 local NumPassed = 0
 local NumFailed = 0
@@ -232,6 +234,14 @@ local function TestDispatch()
 	Check(
 		(LastMessage ~= nil) and (LastMessage:find("Unknown entity", 1, true) ~= nil),
 		"an unknown id is reported"
+	)
+
+	-- A selector-only id is selectable but not creatable, so /summon still refuses it:
+	Calls = Run("/summon item 0 64 0", nil)
+	CheckEquals(#Calls, 0, "a selector-only id spawns nothing")
+	Check(
+		(LastMessage ~= nil) and (LastMessage:find("Unknown entity 'item'", 1, true) ~= nil),
+		"a selector-only id is reported as unknown to /summon"
 	)
 end
 

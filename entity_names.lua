@@ -8,8 +8,10 @@
 -- both consumers ask the engine instead.
 --
 -- Everything else has no engine-side name map - /summon has to call a different constructor per kind, and the
--- selector needs the entity type to match it - so that mapping lives here once. What is missing is a
--- deliberate omission: a 1.12.2 entity Core cannot create yet (elder_guardian, item, ...) is not listed.
+-- selector needs the entity type to match it - so that mapping lives here once. Two kinds of entry live here:
+-- the entities /summon can create, and the ones only the selector can see (Kind = "selector_only": the
+-- entity type exists and can be selected, but Core has no way to create one, so /summon reports them as
+-- unknown). What is missing is a deliberate omission: an entity Cuberite has no class for at all.
 
 -- luacheck: new globals GetEntityInfo
 -- luacheck: globals cMonster cBoat cEntity cProjectileEntity mtInvalidType
@@ -52,6 +54,15 @@ local NON_MOB_ENTITIES =
 	snowball           = { Kind = "projectile", EntityType = ET.etProjectile, ProjectileKind = Pk.pkSnowball },
 	wither_skull       = { Kind = "projectile", EntityType = ET.etProjectile, ProjectileKind = Pk.pkWitherSkull },
 	xp_bottle          = { Kind = "projectile", EntityType = ET.etProjectile, ProjectileKind = Pk.pkExpBottle },
+
+	-- Selectable, but not creatable: these exist as entity types and /summon cannot make one (no NBT, no
+	-- spawn branch), so only the selector half of this table applies to them.
+	item               = { Kind = "selector_only", EntityType = ET.etPickup },
+	item_frame         = { Kind = "selector_only", EntityType = ET.etItemFrame },
+	painting           = { Kind = "selector_only", EntityType = ET.etPainting },
+	leash_knot         = { Kind = "selector_only", EntityType = ET.etLeashKnot },
+	area_effect_cloud  = { Kind = "selector_only", EntityType = ET.etAreaEffectCloud },
+	eye_of_ender       = { Kind = "selector_only", EntityType = ET.etFloater },
 }
 
 

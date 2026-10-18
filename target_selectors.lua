@@ -533,12 +533,10 @@ end
 
 -- Calls the callback for every loaded pawn of a single world. Players live in the
 -- chunk map as well (cWorld::AddEntity puts them in both), so this covers them.
-local function ForEachWorldPawn(a_World, a_Callback)
+local function ForEachWorldEntity(a_World, a_Callback)
 	a_World:ForEachEntity(
 		function (a_Entity)
-			if (a_Entity:IsPawn()) then
-				a_Callback(a_Entity)
-			end
+			a_Callback(a_Entity)
 			return false
 		end
 	)
@@ -574,16 +572,17 @@ local function CollectSelectorCandidates(a_Selector, a_Executor, a_OriginWorld)
 	end
 
 	local UseEntities = (a_Selector.Lookup.type ~= nil)
-	local WantPawns = (Variable == "e")
+	local WantEntities = (Variable == "e")
 		or (UseEntities and ((Variable == "p") or (Variable == "r")))
 
 	-- Candidates are restricted to the origin world. Vanilla's bare "@e"/"@a" do span
 	-- dimensions (spec section 2.1c), but the other worlds are queued by ApplyToTargets() and resolved
 	-- on their own threads, so no other world's lock is ever taken from here (spec section 7.2).
-	-- (Vanilla also selects items, minecarts and the like with "@e"; that is a known deviation until a
-	-- verified 1.12.2 entity-ID mapping exists.)
-	if (WantPawns) then
-		ForEachWorldPawn(a_OriginWorld, function (a_Entity) table.insert(Candidates, a_Entity) end)
+	-- "@e" (and "@p"/"@r" with type=) is every entity in the world - players, mobs, items, minecarts,
+	-- projectiles - because a player is added to the chunk map as well (cWorld::AddPlayer), and the
+	-- command's own kind then narrows the result (spec section 3.1).
+	if (WantEntities) then
+		ForEachWorldEntity(a_OriginWorld, function (a_Entity) table.insert(Candidates, a_Entity) end)
 	else
 		a_OriginWorld:ForEachPlayer(function (a_Player) table.insert(Candidates, a_Player) end)
 	end
@@ -780,7 +779,12 @@ end
 -- "entity" currently behaves like "pawn", because the selector layer only yields
 -- pawns (see the "@e" known deviation in the spec).
 local function MatchesTargetKind(a_Entity, a_Kind)
-	if ((a_Kind == nil) or (a_Kind == "pawn") or (a_Kind == "entity")) then
+	if (a_Kind == "entity") then
+		-- "entity" is every entity ("@e" in vanilla); the command's own filtering, if any, happens above.
+		return true
+	end
+	if ((a_Kind == nil) or (a_Kind == "pawn")) then
+		-- A command that passes no kind keeps the pawn meaning it had before kinds existed.
 		return a_Entity:IsPawn()
 	end
 	if (a_Kind == "player") then
