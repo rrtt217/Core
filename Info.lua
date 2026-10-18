@@ -362,6 +362,20 @@ g_PluginInfo =
 			HelpString = "Saves all worlds.",
 		},
 
+		["/save-off"] =
+		{
+			Permission = "core.save-off",
+			Handler = HandleSaveOffCommand,
+			HelpString = "Disables automatic saving of all worlds.",
+		},
+
+		["/save-on"] =
+		{
+			Permission = "core.save-on",
+			Handler = HandleSaveOnCommand,
+			HelpString = "Enables automatic saving of all worlds.",
+		},
+
 		["/say"] = 
 		{
 			Permission = "core.say",
@@ -469,6 +483,24 @@ g_PluginInfo =
 			Permission = "core.setspawn",
 			Handler = HandleSetSpawnCommand,
 			HelpString = "Changes the world's spawn point.",
+		},
+
+		["/setworldspawn"] =
+		{
+			Permission = "core.setworldspawn",
+			Handler = HandleSetWorldspawnCommand,
+			HelpString = "Sets the spawn point of the world the command runs in (vanilla name).",
+			ParameterCombinations =
+			{
+				{
+					Params = "",
+					Help = "Sets the world spawn to the command's position.",
+				},
+				{
+					Params = "<x> <y> <z>",
+					Help = "Sets the world spawn to the given coordinates (relative coordinates are allowed).",
+				},
+			},
 		},
 
 		["/spawn"] = 
@@ -1181,6 +1213,18 @@ g_PluginInfo =
 			HelpString = "Saves all worlds.",
 		},
 
+		["save-off"] =
+		{
+			Handler = HandleConsoleSaveOff,
+			HelpString = "Disables automatic saving of all worlds.",
+		},
+
+		["save-on"] =
+		{
+			Handler = HandleConsoleSaveOn,
+			HelpString = "Enables automatic saving of all worlds.",
+		},
+
 		["seed"] =
 		{
 			Handler = HandleConsoleSeed,
@@ -1291,6 +1335,12 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleSpawn,
 			HelpString = "Returns a player to the spawn point.",
+		},
+
+		["setworldspawn"] =
+		{
+			Handler = HandleConsoleSetWorldspawn,
+			HelpString = "Sets the spawn point of the default world (vanilla name).",
 		},
 
 		["stopsound"] =
