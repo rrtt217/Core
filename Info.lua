@@ -989,6 +989,24 @@ g_PluginInfo =
 			Handler = HandleWorldsCommand,
 			HelpString = "Shows a list of all the worlds.",
 		},
+
+		["/xp"] =
+		{
+			Permission = "core.xp",
+			Handler = HandleXPCommand,
+			HelpString = "Adds experience points, or experience levels when the amount ends with L.",
+			ParameterCombinations =
+			{
+				{
+					Params = "amount [player]",
+					Help = "Adds (or with a negative amount removes) that many experience points.",
+				},
+				{
+					Params = "amountL [player]",
+					Help = "Adds (or with a negative amount removes) that many experience levels.",
+				},
+			},
+		},
 	},  -- Commands
 
 
@@ -1696,6 +1714,12 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleWorlds,
 			HelpString = "Shows a list of all the worlds.",
+		},
+
+		["xp"] =
+		{
+			Handler = HandleConsoleXP,
+			HelpString = "Adds experience points (or, with an L suffix, levels) to a player.",
 		},
 	},  -- ConsoleCommands
 	Permissions = 
