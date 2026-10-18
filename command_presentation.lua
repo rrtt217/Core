@@ -635,21 +635,18 @@ end
 
 
 --- Builds the payload of the "MC|StopSound" plugin message, which is how 1.12.2 implements /stopsound.
--- The client parses it as zero, one or two length-prefixed strings, in this order: the sound category, then
--- the sound event. An omitted string means "every..." for that part, so an empty payload stops everything.
--- The two-string form is verified byte-for-byte against a ProtoProxy capture of a vanilla 1.12.2 server
--- (`/stopsound Harry00025 weather minecraft:weather.rain` produced 07 "weather" 16 "minecraft:weather.rain");
--- the zero- and one-string forms follow from the client's parsing and from the 1.13 Stop Sound packet, whose
--- flags cover the same three cases - see the spec's deviations.
+-- The payload is always two length-prefixed strings: the sound category, then the sound event. A part the
+-- command did not ask for is written as an empty string, not left out - all three forms are verified
+-- byte-for-byte against ProtoProxy captures of a vanilla 1.12.2 server:
+--   /stopsound <player>                         -> 00 00
+--   /stopsound <player> weather                 -> 07 "weather" 00
+--   /stopsound <player> weather <sound event>   -> 07 "weather" 16 "minecraft:weather.rain"
+-- An empty category therefore means "every category" and an empty sound event "every sound", which is the
+-- same three-case meaning the 1.13 Stop Sound packet expresses with its flags.
 function BuildStopSoundPayload(a_Source, a_Sound)
-	local Payload = ""
-	if (a_Source ~= nil) then
-		Payload = Payload .. EncodeVarInt(#a_Source) .. a_Source
-	end
-	if (a_Sound ~= nil) then
-		Payload = Payload .. EncodeVarInt(#a_Sound) .. a_Sound
-	end
-	return Payload
+	local Source = a_Source or ""
+	local Sound = a_Sound or ""
+	return EncodeVarInt(#Source) .. Source .. EncodeVarInt(#Sound) .. Sound
 end
 
 

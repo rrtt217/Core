@@ -434,14 +434,14 @@ local function TestStopsoundMessage()
 		CheckEquals(Call.Args[2], "\7weather\22minecraft:weather.rain", "the payload matches the vanilla capture")
 	end
 
-	-- The two shapes the capture does not cover, as implemented:
+	-- The other two captured shapes (the missing part is an empty string, never left out):
 	Run(HandleStopsoundCommand, "/stopsound @s weather")
 	Call = FindCall(Subject.Client.Calls, "SendPluginMessage")
-	Check(Call ~= nil and Call.Args[2] == "\7weather", "a category alone sends one string")
+	Check(Call ~= nil and Call.Args[2] == "\7weather\0", "a category alone sends the category and an empty sound")
 
 	Run(HandleStopsoundCommand, "/stopsound @s")
 	Call = FindCall(Subject.Client.Calls, "SendPluginMessage")
-	Check(Call ~= nil and Call.Args[2] == "", "no argument sends an empty payload")
+	Check(Call ~= nil and Call.Args[2] == "\0\0", "no argument sends two empty strings")
 
 	-- Refusals:
 	Run(HandleStopsoundCommand, "/stopsound @s ui")

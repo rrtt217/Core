@@ -587,25 +587,31 @@ end
 
 
 local function TestStopsound()
-	-- The payload 1.12.2 sends on the "MC|StopSound" channel. The reference bytes come from a ProtoProxy
-	-- capture of a vanilla 1.12.2 server: "/stopsound Harry00025 weather minecraft:weather.rain" made it
-	-- send 0x18 (Plugin Message) with channel "MC|StopSound" and the payload
-	-- 07 "weather" 16 "minecraft:weather.rain" - the category first, then the sound event.
+	-- The payload 1.12.2 sends on the "MC|StopSound" channel is always two length-prefixed strings - the
+	-- category, then the sound event - and a part the command did not ask for is an empty string. All three
+	-- forms below are the server's actual bytes, captured with ProtoProxy from a vanilla 1.12.2 server.
 	CheckEquals(
 		BuildStopSoundPayload("weather", "minecraft:weather.rain"),
 		"\7weather\22minecraft:weather.rain",
-		"the captured payload is reproduced byte for byte"
+		"both arguments: 07 \"weather\" 16 \"minecraft:weather.rain\""
 	)
-
-	-- One string (or none) means "everything" for the part that is missing:
-	CheckEquals(BuildStopSoundPayload("weather", nil), "\7weather", "a category alone sends one string")
-	CheckEquals(BuildStopSoundPayload(nil, nil), "", "no argument at all sends an empty payload")
+	CheckEquals(
+		BuildStopSoundPayload("weather", nil),
+		"\7weather\0",
+		"a category alone: 07 \"weather\" 00"
+	)
+	CheckEquals(
+		BuildStopSoundPayload(nil, nil),
+		"\0\0",
+		"no argument at all: 00 00, not an empty payload"
+	)
 
 	-- The length prefix is a VarInt, so a long sound name still encodes correctly:
 	local LongName = string.rep("a", 200)
 	local LongPayload = BuildStopSoundPayload(nil, LongName)
-	CheckEquals(LongPayload:sub(1, 2), "\200\1", "a length above 127 uses two VarInt bytes")
-	CheckEquals(LongPayload:sub(3), LongName, "the name itself is written unchanged")
+	CheckEquals(LongPayload:sub(1, 3), "\0\200\1", "an empty category, then a length above 127 as two VarInt bytes")
+	CheckEquals(LongPayload:sub(4, 3 + #LongName), LongName, "the name itself is written unchanged")
+	CheckEquals(#LongPayload, 3 + #LongName, "the payload is exactly the two length prefixes plus the name")
 
 	-- Parsing:
 	local Parse = ParseStopsoundLine({ "/stopsound", "Harry00025", "weather", "minecraft:weather.rain" })
