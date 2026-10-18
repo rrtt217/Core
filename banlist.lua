@@ -2,6 +2,17 @@
 -- banlist.lua
 
 -- Implements the banlist-related commands, console commands, API and storage
+--
+-- The vanilla 1.12.2 names are /ban-ip, /banlist, /pardon and /pardon-ip; their parsers and IP
+-- validation live in command_ban.lua, the database side is here.
+-- Behaviour and sources: specs/commands/vanilla-1.12.2-ban-commands.md
+--
+-- The handlers are only referenced from Info.lua, so luacheck counts them as unused globals in this
+-- file (131 == "unused global variable").
+-- luacheck: ignore 131
+-- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess
+-- luacheck: globals IsValidIPAddress ParseBanIPArguments ParseBanlistKind ParsePardonArguments
+-- luacheck: globals ParsePardonIPArguments FormatBanlist
 
 
 
@@ -321,6 +332,46 @@ end
 
 
 
+--- Adds a_IP to the banlist and kicks every online player connecting from it.
+-- Shared by the legacy console command and the vanilla /ban-ip (spec section 2.1).
+local function BanIPAddress(a_IP, a_Reason, a_BannedBy)
+	AddIPToBanlist(a_IP, a_Reason, a_BannedBy)
+
+	cRoot:Get():ForEachPlayer(
+		function (a_Player)
+			local Client = a_Player:GetClientHandle()
+			if (Client and Client:GetIPString() == a_IP) then
+				Client:Kick(a_Reason)
+			end
+		end
+	)
+end
+
+
+
+
+
+--- Returns the IP address of the online player with the given name, or nil.
+-- /ban-ip resolves a name only for players that are currently online (spec section 2.1).
+local function GetOnlinePlayerIP(a_Name)
+	local Result = nil
+	cRoot:Get():ForEachPlayer(
+		function (a_Player)
+			if (a_Player:GetName():lower() == a_Name:lower()) then
+				local Client = a_Player:GetClientHandle()
+				if (Client ~= nil) then
+					Result = Client:GetIPString()
+				end
+			end
+		end
+	)
+	return Result
+end
+
+
+
+
+
 function HandleConsoleBanIP(a_Split)
 	-- Check params:
 	if (a_Split[2] == nil) then
@@ -334,18 +385,8 @@ function HandleConsoleBanIP(a_Split)
 		Reason = table.concat(a_Split, " ", 3)
 	end
 
-	-- Ban the player:
-	AddIPToBanlist(BanIP, Reason, "<console>")
-
-	-- Kick the player, if they're online:
-	cRoot:Get():ForEachPlayer(
-		function (a_Player)
-			local Client = a_Player:GetClientHandle()
-			if (Client and Client:GetIPString() == BanIP) then
-				Client:Kick(Reason)
-			end
-		end
-	)
+	-- Ban the player and kick them if they're online:
+	BanIPAddress(BanIP, Reason, "<console>")
 
 	-- Report:
 	LOGINFO("Successfully banned IP " .. BanIP)
@@ -357,15 +398,16 @@ end
 
 
 function HandleConsoleBanList(a_Split)
-	if (a_Split[2] == nil) then
-		return true, table.concat(ListBannedPlayers(), ", ")
+	local Kind, Reason = ParseBanlistKind(a_Split[2])
+	if (Kind == nil) then
+		return true, Reason
 	end
 
-	if (string.lower(a_Split[2]) == "ips") then
-		return true, table.concat(ListBannedIPs(), ", ")
+	local Entries = ListBannedPlayers()
+	if (Kind == "ips") then
+		Entries = ListBannedIPs()
 	end
-
-	return true, "Unknown banlist subcommand"
+	return true, FormatBanlist(Kind, Entries)
 end
 
 
@@ -402,6 +444,111 @@ function HandleConsoleUnbanIP(a_Split)
 	-- Inform the admin:
 	LOGINFO("Unbanned " .. a_Split[2])
 	return true
+end
+
+
+
+
+
+--- /ban-ip <address|name> [reason ...] - 1.12.2 spec section 2.1.
+function HandleBanIPCommand(a_Split, a_Player)
+	local Args, Reason = ParseBanIPArguments(a_Split)
+	if (Args == nil) then
+		return true, SendMessageFailure(a_Player, Reason), 0
+	end
+
+	local IP
+	if (IsValidIPAddress(Args.Target)) then
+		IP = Args.Target
+	else
+		IP = GetOnlinePlayerIP(Args.Target)
+		if (IP == nil) then
+			return true, SendMessageFailure(a_Player,
+				"\"" .. Args.Target .. "\" is not a valid IP address or an online player"), 0
+		end
+	end
+
+	local BannedBy = "<console>"
+	if (a_Player ~= nil) then
+		BannedBy = a_Player:GetName()
+	end
+	BanIPAddress(IP, Args.Reason, BannedBy)
+	LOGINFO("Banned IP " .. IP .. ", banned by " .. BannedBy)
+	return true, SendMessageSuccess(a_Player, "Banned IP address " .. IP), 1
+end
+
+
+
+
+
+--- /banlist <ips|players> - 1.12.2 spec section 2.2.
+function HandleBanlistCommand(a_Split, a_Player)
+	local Kind, Reason = ParseBanlistKind(a_Split[2])
+	if (Kind == nil) then
+		return true, SendMessageFailure(a_Player, Reason), 0
+	end
+
+	local Entries = ListBannedPlayers()
+	if (Kind == "ips") then
+		Entries = ListBannedIPs()
+	end
+	return true, SendMessage(a_Player, FormatBanlist(Kind, Entries)), 1
+end
+
+
+
+
+
+--- /pardon <name> - 1.12.2 spec section 2.3.
+function HandlePardonCommand(a_Split, a_Player)
+	local Args, Reason = ParsePardonArguments(a_Split)
+	if (Args == nil) then
+		return true, SendMessageFailure(a_Player, Reason), 0
+	end
+
+	RemovePlayerFromBanlist(Args.Name)
+	LOGINFO("Unbanned " .. Args.Name)
+	return true, SendMessageSuccess(a_Player, "Unbanned player " .. Args.Name), 1
+end
+
+
+
+
+
+--- /pardon-ip <address> - 1.12.2 spec section 2.4.
+function HandlePardonIPCommand(a_Split, a_Player)
+	local Args, Reason = ParsePardonIPArguments(a_Split)
+	if (Args == nil) then
+		return true, SendMessageFailure(a_Player, Reason), 0
+	end
+
+	RemoveIPFromBanlist(Args.IP)
+	LOGINFO("Unbanned IP " .. Args.IP)
+	return true, SendMessageSuccess(a_Player, "Unbanned IP address " .. Args.IP), 1
+end
+
+
+
+
+
+function HandleConsoleBanIPAddress(a_Split)
+	return HandleBanIPCommand(a_Split, nil)
+end
+
+
+
+
+
+function HandleConsolePardon(a_Split)
+	return HandlePardonCommand(a_Split, nil)
+end
+
+
+
+
+
+function HandleConsolePardonIP(a_Split)
+	return HandlePardonIPCommand(a_Split, nil)
 end
 
 

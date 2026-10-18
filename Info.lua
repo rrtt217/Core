@@ -26,6 +26,31 @@ g_PluginInfo =
 			HelpString = "Bans a player.",
 		},
 
+		["/ban-ip"] =
+		{
+			Permission = "core.ban-ip",
+			Handler = HandleBanIPCommand,
+			HelpString = "Bans an IP address, or the IP address of an online player.",
+		},
+
+		["/banlist"] =
+		{
+			Permission = "core.banlist",
+			Handler = HandleBanlistCommand,
+			HelpString = "Lists the banned IP addresses or the banned players.",
+			ParameterCombinations =
+			{
+				{
+					Params = "ips",
+					Help = "Lists the banned IP addresses.",
+				},
+				{
+					Params = "players",
+					Help = "Lists the banned players.",
+				},
+			},
+		},
+
 		["/clear"] = 
 		{
 			Permission = "core.clear",
@@ -288,6 +313,20 @@ g_PluginInfo =
 			Permission = "core.rank",
 			Handler = HandleOpCommand,
 			HelpString = "Add a player to the administrator rank.",
+		},
+
+		["/pardon"] =
+		{
+			Permission = "core.pardon",
+			Handler = HandlePardonCommand,
+			HelpString = "Removes a player from the banlist.",
+		},
+
+		["/pardon-ip"] =
+		{
+			Permission = "core.pardon-ip",
+			Handler = HandlePardonIPCommand,
+			HelpString = "Removes an IP address from the banlist.",
 		},
 
 		["/particle"] =
@@ -968,6 +1007,12 @@ g_PluginInfo =
 			HelpString = "Bans a player by name.",
 		},
 
+		["ban-ip"] =
+		{
+			Handler = HandleConsoleBanIPAddress,
+			HelpString = "Bans an IP address, or the IP address of an online player.",
+		},
+
 		["banip"] =
 		{
 			Handler =  HandleConsoleBanIP,
@@ -978,7 +1023,7 @@ g_PluginInfo =
 		["banlist"] =
 		{
 			Handler = HandleConsoleBanList,
-			HelpString = "Shows a list of all players banned by name.",
+			HelpString = "Shows the banned players (banlist players) or IP addresses (banlist ips).",
 		},
 
 		["banlist ips"] =
@@ -1157,6 +1202,18 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleOp,
 			HelpString = "Add a player to the Admin rank.",
+		},
+
+		["pardon"] =
+		{
+			Handler = HandleConsolePardon,
+			HelpString = "Removes a player from the banlist.",
+		},
+
+		["pardon-ip"] =
+		{
+			Handler = HandleConsolePardonIP,
+			HelpString = "Removes an IP address from the banlist.",
 		},
 
 		["msg"] =
