@@ -14,15 +14,47 @@
 --
 -- Run with:  lua tests/test_selectors.lua   (from the plugin folder)
 
+-- The stubs below stand in for engine globals that the module under test reads, so luacheck counts
+-- them as unused in this file (131 == "unused global variable").
+-- luacheck: ignore 131
+
 if (arg == nil) or (arg[0] == nil) or (arg[0]:find("test_selectors") == nil) then
 	return
 end
 
 local ScriptDir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
+
+-- Entity-name constants the shared lookup reads while it loads (entity_names.lua). Their values are opaque
+-- here: the tests only check that both sides compare the same sentinel.
+mtInvalidType = "mtInvalidType"
+-- The entity types live on the cEntity class table (tolua registers them inside that module); a bare global
+-- would be nil in the real server, which is exactly the bug this stub shape rules out.
+cEntity =
+{
+	etEntity = "etEntity", etEnderCrystal = "etEnderCrystal", etPlayer = "etPlayer",
+	etPickup = "etPickup", etMonster = "etMonster", etFallingBlock = "etFallingBlock",
+	etMinecart = "etMinecart", etBoat = "etBoat", etTNT = "etTNT", etProjectile = "etProjectile",
+	etExpOrb = "etExpOrb", etFloater = "etFloater", etItemFrame = "etItemFrame",
+	etPainting = "etPainting", etLeashKnot = "etLeashKnot", etAreaEffectCloud = "etAreaEffectCloud",
+}
+E_ITEM_MINECART, E_ITEM_CHEST_MINECART, E_ITEM_FURNACE_MINECART =
+	"E_ITEM_MINECART", "E_ITEM_CHEST_MINECART", "E_ITEM_FURNACE_MINECART"
+E_ITEM_MINECART_WITH_HOPPER, E_ITEM_MINECART_WITH_TNT = "E_ITEM_MINECART_WITH_HOPPER", "E_ITEM_MINECART_WITH_TNT"
+cProjectileEntity =
+{
+	pkArrow = "pkArrow", pkEgg = "pkEgg", pkEnderPearl = "pkEnderPearl", pkFirework = "pkFirework",
+	pkGhastFireball = "pkGhastFireball", pkSplashPotion = "pkSplashPotion", pkFireCharge = "pkFireCharge",
+	pkSnowball = "pkSnowball", pkWitherSkull = "pkWitherSkull", pkExpBottle = "pkExpBottle",
+}
+
+dofile(ScriptDir .. "/../entity_names.lua")
 dofile(ScriptDir .. "/../target_selectors.lua")
 
 -- luacheck: new globals cRoot cBoundingBox Vector3d cMonster
 -- luacheck: read globals ParseSelector ResolveSelectorToken ResolveTargets GetTargetName ApplyToTargets
+-- luacheck: read globals GetEntityInfo mtInvalidType cEntity
+-- luacheck: read globals etMinecart etProjectile E_ITEM_MINECART E_ITEM_CHEST_MINECART E_ITEM_FURNACE_MINECART
+-- luacheck: read globals E_ITEM_MINECART_WITH_HOPPER E_ITEM_MINECART_WITH_TNT cProjectileEntity
 
 local NumPassed = 0
 local NumFailed = 0
@@ -164,13 +196,26 @@ cMonster =
 	-- The real binding is called with colon syntax (the class table is argument #1),
 	-- so the stub enforces that shape: a dot call would pass the string as a_Self and
 	-- fail here instead of only at runtime.
+	-- Mirrors the engine's g_MobTypeNames, which maps every mob type to its Cuberite name, its vanilla name
+	-- and its 1.12.2 NBT id, case-insensitively. The returned value is a sentinel here; the tests only need
+	-- both sides (the lookup and the fake entities) to agree on it.
 	StringToMobType = function (a_Self, a_Name)
 		assert(a_Self == cMonster, "StringToMobType must be called with colon syntax")
 		assert(type(a_Name) == "string", "StringToMobType expects a string argument")
-		if ((a_Name == "creeper") or (a_Name == "cow") or (a_Name == "cavespider")) then
-			return "type:" .. a_Name
+		local Names =
+		{
+			creeper = "creeper",
+			cow = "cow",
+			cavespider = "cavespider",
+			cave_spider = "cavespider",
+			CaveSpider = "cavespider",
+			zombie = "zombie",
+		}
+		local Canonical = Names[a_Name] or Names[a_Name:lower()]
+		if (Canonical == nil) then
+			return mtInvalidType
 		end
-		return "type:invalid"
+		return "type:" .. Canonical
 	end,
 
 	-- Also a C++ static bound with tolua_isusertable (colon syntax).

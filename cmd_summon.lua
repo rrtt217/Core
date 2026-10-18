@@ -1,150 +1,53 @@
--- luacheck: globals ParseCommandCoords GetOriginPosition SpawnEntity
+-- The console handler is only referenced from Info.lua, so luacheck counts it as an unused global in this
+-- file (131 == "unused global variable").
+-- luacheck: ignore 131
+-- luacheck: globals ParseCommandCoords GetOriginPosition GetEntityInfo
 -- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess cRoot
-local Minecarts =
-{
-	["minecart"] = E_ITEM_MINECART,
-	["chest_minecart"] = E_ITEM_CHEST_MINECART,
-	["furnace_minecart"] = E_ITEM_FURNACE_MINECART,
-	["hopper_minecart"] = E_ITEM_MINECART_WITH_HOPPER,
-	["tnt_minecart"] = E_ITEM_MINECART_WITH_TNT,
-
-	-- 1.10 and below
-	["MinecartChest"] = E_ITEM_CHEST_MINECART,
-	["MinecartFurnace"] = E_ITEM_FURNACE_MINECART,
-	["MinecartHopper"] = E_ITEM_MINECART_WITH_HOPPER,
-	["MinecartRideable"] = E_ITEM_MINECART,
-	["MinecartTNT"] = E_ITEM_MINECART_WITH_TNT
-}
-
-local Mobs =
-{
-	["bat"] = mtBat,
-	["blaze"] = mtBlaze,
-	["cave_spider"] = mtCaveSpider,
-	["chicken"] = mtChicken,
-	["cow"] = mtCow,
-	["creeper"] = mtCreeper,
-	["ender_dragon"] = mtEnderDragon,
-	["enderman"] = mtEnderman,
-	["ghast"] = mtGhast,
-	["giant"] = mtGiant,
-	["guardian"] = mtGuardian,
-	["horse"] = mtHorse,
-	["iron_golem"] = mtIronGolem,
-	["magma_cube"] = mtMagmaCube,
-	["mooshroom"] = mtMooshroom,
-	["ocelot"] = mtOcelot,
-	["pig"] = mtPig,
-	["rabbit"] = mtRabbit,
-	["sheep"] = mtSheep,
-	["silverfish"] = mtSilverfish,
-	["skeleton"] = mtSkeleton,
-	["slime"] = mtSlime,
-	["snowman"] = mtSnowGolem,
-	["spider"] = mtSpider,
-	["squid"] = mtSquid,
-	["villager"] = mtVillager,
-	["witch"] = mtWitch,
-	["wither"] = mtWither,
-	["wither_skeleton"] = mtWitherSkeleton,
-	["wolf"] = mtWolf,
-	["zombie"] = mtZombie,
-	["zombie_pigman"] = mtZombiePigman,
-	["zombie_villager"] = mtZombieVillager,
-
-	-- 1.10 and below
-	["Bat"] = mtBat,
-	["Blaze"] = mtBlaze,
-	["CaveSpider"] = mtCaveSpider,
-	["Chicken"] = mtChicken,
-	["Cow"] = mtCow,
-	["Creeper"] = mtCreeper,
-	["EnderDragon"] = mtEnderDragon,
-	["Enderman"] = mtEnderman,
-	["Ghast"] = mtGhast,
-	["Giant"] = mtGiant,
-	["Guardian"] = mtGuardian,
-	["Horse"] = mtHorse,
-	["LavaSlime"] = mtMagmaCube,
-	["MushroomCow"] = mtMooshroom,
-	["Ozelot"] = mtOcelot,
-	["Pig"] = mtPig,
-	["Rabbit"] = mtRabbit,
-	["Sheep"] = mtSheep,
-	["Silverfish"] = mtSilverfish,
-	["Skeleton"] = mtSkeleton,
-	["Slime"] = mtSlime,
-	["SnowMan"] = mtSnowGolem,
-	["Spider"] = mtSpider,
-	["Squid"] = mtSquid,
-	["Villager"] = mtVillager,
-	["VillagerGolem"] = mtIronGolem,
-	["Witch"] = mtWitch,
-	["Wither"] = mtWither,
-	["WitherSkeleton"] = mtWitherSkeleton,
-	["Wolf"] = mtWolf,
-	["Zombie"] = mtZombie,
-	["PigZombie"] = mtZombiePigman,
-	["ZombieVillager"] = mtZombieVillager
-}
-
-local Projectiles =
-{
-	["arrow"] = cProjectileEntity.pkArrow,
-	["egg"] = cProjectileEntity.pkEgg,
-	["ender_pearl"] = cProjectileEntity.pkEnderPearl,
-	["fireworks_rocket"] = cProjectileEntity.pkFirework,
-	["fireball"] = cProjectileEntity.pkGhastFireball,
-	["potion"] = cProjectileEntity.pkSplashPotion,
-	["small_fireball"] = cProjectileEntity.pkFireCharge,
-	["snowball"] = cProjectileEntity.pkSnowball,
-	["wither_skull"] = cProjectileEntity.pkWitherSkull,
-	["xp_bottle"] = cProjectileEntity.pkExpBottle,
-
-	-- 1.10 and below
-	["Arrow"] = cProjectileEntity.pkArrow,
-	["Fireball"] = cProjectileEntity.pkGhastFireball,
-	["FireworksRocketEntity"] = cProjectileEntity.pkFirework,
-	["SmallFireball"] = cProjectileEntity.pkFireCharge,
-	["Snowball"] = cProjectileEntity.pkSnowball,
-	["ThrownEgg"] = cProjectileEntity.pkEgg,
-	["ThrownEnderpearl"] = cProjectileEntity.pkEnderPearl,
-	["ThrownExpBottle"] = cProjectileEntity.pkExpBottle,
-	["ThrownPotion"] = cProjectileEntity.pkSplashPotion,
-	["WitherSkull"] = cProjectileEntity.pkWitherSkull
-}
-
+-- luacheck: globals cBoat cItem Vector3d Vector3i
+--
+-- Entity names are not listed in this file: entity_names.lua answers "what is this id?" for both this command
+-- and the target selector, asking the engine's own mob table for mobs and carrying the non-mob ids once.
 local function SpawnEntity(EntityName, World, X, Y, Z, Player)
-	if EntityName == "boat" or EntityName == "Boat" then
-		local Material = cBoat.bmOak
+	local Info = GetEntityInfo(EntityName)
+	if (Info == nil) then
+		return false
+	end
 
-		World:SpawnBoat(Vector3d(X, Y, Z), Material)
-	elseif EntityName == "falling_block" or EntityName == "FallingSand" then
-		local BlockType = E_BLOCK_SAND
-		local BlockMeta = 0
-
-		World:SpawnFallingBlock(Vector3i(X, Y, Z), BlockType, BlockMeta)
-	elseif EntityName == "lightning_bolt" or EntityName == "LightningBolt" then
+	if (Info.Kind == "mob") then
+		World:SpawnMob(X, Y, Z, Info.MobType)
+	elseif (Info.Kind == "minecart") then
+		World:SpawnMinecart(Vector3d(X, Y, Z), Info.CartType)
+	elseif (Info.Kind == "projectile") then
+		-- A projectile remembers who shot it and with what. Without a player (the console) there is neither,
+		-- so it starts at rest instead of inheriting a look direction - and no nil method is called.
+		if (Player ~= nil) then
+			World:CreateProjectile(
+				Vector3d(X, Y, Z), Info.ProjectileKind, Player, Player:GetEquippedItem(), Player:GetLookVector() * 20
+			)
+		else
+			World:CreateProjectile(Vector3d(X, Y, Z), Info.ProjectileKind, nil, cItem())
+		end
+	elseif (Info.Kind == "boat") then
+		World:SpawnBoat(Vector3d(X, Y, Z), cBoat.bmOak)
+	elseif (Info.Kind == "falling_block") then
+		World:SpawnFallingBlock(Vector3i(X, Y, Z), E_BLOCK_SAND, 0)
+	elseif (Info.Kind == "lightning_bolt") then
 		World:CastThunderbolt(Vector3i(X, Y, Z))
-	elseif Minecarts[EntityName] then
-		World:SpawnMinecart(Vector3d(X, Y, Z), Minecarts[EntityName])
-	elseif Mobs[EntityName] then
-		World:SpawnMob(X, Y, Z, Mobs[EntityName])
-	elseif Projectiles[EntityName] then
-		World:CreateProjectile(Vector3d(X, Y, Z), Projectiles[EntityName], Player, Player:GetEquippedItem(), Player:GetLookVector() * 20)
-	elseif EntityName == "tnt" or EntityName == "PrimedTnt" then
+	elseif (Info.Kind == "tnt") then
 		World:SpawnPrimedTNT(Vector3d(X, Y, Z))
-	elseif EntityName == "xp_orb" or EntityName == "XPOrb" then
-		local Reward = 1
-
-		World:SpawnExperienceOrb(Vector3d(X, Y, Z), Reward)
-	elseif EntityName == "ender_crystal" or EntityName == "EnderCrystal" then
+	elseif (Info.Kind == "xp_orb") then
+		World:SpawnExperienceOrb(Vector3d(X, Y, Z), 1)
+	elseif (Info.Kind == "ender_crystal") then
 		World:SpawnEnderCrystal(Vector3d(X, Y, Z), false)
 	else
 		return false
 	end
 	return true
 end
+
+
+
+
 
 function HandleSummonCommand(Split, Player, _, Origin)
 	local Response
@@ -183,7 +86,11 @@ function HandleSummonCommand(Split, Player, _, Origin)
 		end
 
 		if SpawnEntity(Split[2], World, X, Y, Z, Player) then
-			Response = SendMessageSuccess(Player, "Successfully summoned entity at [X:" .. math.floor(X) .. " Y:" .. math.floor(Y) .. " Z:" .. math.floor(Z) .. "]")
+			Response = SendMessageSuccess(
+				Player,
+				"Successfully summoned entity at [X:" .. math.floor(X)
+					.. " Y:" .. math.floor(Y) .. " Z:" .. math.floor(Z) .. "]"
+			)
 		else
 			Response = SendMessageFailure(Player, "Unknown entity '" .. Split[2] .. "'")
 		end

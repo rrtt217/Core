@@ -16,9 +16,11 @@
 
 -- The six exported globals do not all fit on one `new globals` directive line, so
 -- they are declared read-only and this file is allowed to define them.
--- 111 == "setting non-standard global variable".
+-- 111 == "setting non-standard global variable"; 131 == "unused global" for the
+-- exported functions, which are read from the command handlers rather than here.
+-- luacheck: ignore 131
 -- luacheck: globals ParseSelector ResolveSelector ResolveSelectorToken ResolveTargets
--- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext GetOriginPosition
+-- luacheck: globals GetTargetName ApplyToTargets MakeSelectorContext GetOriginPosition GetEntityInfo
 -- luacheck: globals cRoot cMonster cBoundingBox Vector3d
 -- luacheck: ignore 111
 
@@ -309,19 +311,26 @@ end
 
 
 local function MatchesTypeArgument(a_Entity, a_Argument)
+	-- "player" is a selector concept, not a summonable id, so it is the one name this layer resolves itself.
+	-- The rest goes through the same lookup /summon uses, which asks the engine's mob table for mobs and
+	-- carries the non-mob ids once (entity_names.lua) - one table, so the two cannot drift apart.
+	local Info = nil
+	if (a_Argument.Value:lower() ~= "player") then
+		Info = GetEntityInfo(a_Argument.Value)
+	end
+
 	local Matches
-	if (a_Argument.Value == "player") then
+	if (a_Argument.Value:lower() == "player") then
 		Matches = a_Entity:IsPlayer()
-	elseif (a_Entity:IsMob()) then
-		-- Entity IDs are compared case-insensitively and without the underscore
-		-- separator, so both "Creeper" and "cave_spider" resolve. Whether 1.12.2
-		-- itself was case-sensitive is contradictory in the sources [待核].
-		-- NOTE: StringToMobType is a C++ static, but tolua++ binds it with
-		-- tolua_isusertable(tolua_S, 1, "cMonster"), so it must be called with
-		-- colon syntax (the class table becomes argument #1). Calling it with a
-		-- dot raises "argument #1 is 'string'; 'cMonster' expected".
-		local Normalized = (a_Argument.Value:lower():gsub("_", ""))
-		Matches = (a_Entity:GetMobType() == cMonster:StringToMobType(Normalized))
+	elseif (Info == nil) then
+		-- An id Core does not know matches nothing; the selector itself is still well formed.
+		Matches = false
+	elseif (Info.Kind == "mob") then
+		Matches = a_Entity:IsMob() and (a_Entity:GetMobType() == Info.MobType)
+	elseif (Info.EntityType ~= nil) then
+		-- A non-mob id. @e only yields pawns today (spec section 5), so this cannot match yet; it is written
+		-- against the entity type so that widening @e later needs no change here.
+		Matches = (a_Entity:GetEntityType() == Info.EntityType)
 	else
 		Matches = false
 	end
