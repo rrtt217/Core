@@ -143,6 +143,28 @@ g_PluginInfo =
 			},
 		},
 
+		["/function"] =
+		{
+			Permission = "core.function",
+			Handler = HandleFunctionCommand,
+			HelpString = "Runs the commands of a .mcfunction file from the world's data/functions folder.",
+			ParameterCombinations =
+			{
+				{
+					Params = "function",
+					Help = "Runs the function (namespace:path, the namespace defaults to minecraft).",
+				},
+				{
+					Params = "function if selector",
+					Help = "Runs the function only when the selector matches at least one entity.",
+				},
+				{
+					Params = "function unless selector",
+					Help = "Runs the function only when the selector matches no entity.",
+				},
+			},
+		},
+
 		["/give"] = 
 		{
 			Permission = "core.give",
@@ -1179,6 +1201,12 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleExecute,
 			HelpString = "Runs a command on behalf of another entity, from that entity's position.",
+		},
+
+		["function"] =
+		{
+			Handler = HandleConsoleFunction,
+			HelpString = "Runs the commands of a .mcfunction file from the world's data/functions folder.",
 		},
 
 		["gamemode"] =
