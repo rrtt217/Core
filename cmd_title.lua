@@ -18,7 +18,7 @@
 -- luacheck: ignore 131
 -- luacheck: new globals HandleTitleCommand HandleConsoleTitle
 -- luacheck: globals SendMessageFailure SendMessageSuccess ResolveTargets ApplyToTargets GetTargetName
--- luacheck: globals MakeSelectorContext ParseTitleLine ParseTextArgument CheckChatDeliverable
+-- luacheck: globals MakeSelectorContext MakeChatSafe ParseTitleLine ParseTextArgument CheckChatDeliverable
 -- luacheck: globals cCompositeChat ctAboveActionBar
 
 -- The text each mode sets, and the verb that describes it, for the response message.
@@ -95,7 +95,7 @@ end
 function HandleTitleCommand(Split, Player, EntireCommand, Origin)
 	local Parse, Reason = ParseTitleLine(Split, EntireCommand)
 	if (Parse == nil) then
-		return true, SendMessageFailure(Player, Reason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(Reason)), 0
 	end
 
 	-- The text modes carry an argument that is either a JSON component or plain text; it is resolved once,
@@ -104,14 +104,14 @@ function HandleTitleCommand(Split, Player, EntireCommand, Origin)
 	if (TEXT_MODES[Parse.Mode]) then
 		local Argument, TextReason = ParseTextArgument(Parse.RawText, Parse.Text)
 		if (Argument == nil) then
-			return true, SendMessageFailure(Player, TextReason), 0
+			return true, SendMessageFailure(Player, MakeChatSafe(TextReason)), 0
 		end
 
 		if (Parse.Mode == "actionbar") then
 			-- The action bar is sent through the chat packet, which drops a message containing "${":
 			local Deliverable = CheckChatDeliverable((Argument.Kind == "json") and Argument.Json or Argument.Text)
 			if (Deliverable ~= nil) then
-				return true, SendMessageFailure(Player, Deliverable), 0
+				return true, SendMessageFailure(Player, MakeChatSafe(Deliverable)), 0
 			end
 		end
 		Text = Argument
@@ -121,7 +121,7 @@ function HandleTitleCommand(Split, Player, EntireCommand, Origin)
 	-- the selector layer filters "@e" down to the players it matched:
 	local Targets, ResolveReason = ResolveTargets(Parse.Targets, MakeSelectorContext(Player, Origin), "player")
 	if (Targets == nil) then
-		return true, SendMessageFailure(Player, ResolveReason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(ResolveReason)), 0
 	end
 
 	local ReachedName = nil
@@ -134,7 +134,7 @@ function HandleTitleCommand(Split, Player, EntireCommand, Origin)
 	)
 
 	if (Affected == 0) then
-		return true, SendMessageFailure(Player, "No player was reached"), 0
+		return true, SendMessageFailure(Player, MakeChatSafe("No player was reached")), 0
 	end
 
 	local Action = TITLE_ACTIONS[Parse.Mode]

@@ -15,18 +15,18 @@
 -- luacheck: ignore 131
 -- luacheck: new globals HandleTellrawCommand HandleConsoleTellraw
 -- luacheck: globals SendMessageFailure SendMessageSuccess ResolveTargets ApplyToTargets
--- luacheck: globals MakeSelectorContext ParseTellrawLine
+-- luacheck: globals MakeSelectorContext MakeChatSafe ParseTellrawLine
 
 function HandleTellrawCommand(Split, Player, EntireCommand, Origin)
 	local Parse, Reason = ParseTellrawLine(Split, EntireCommand)
 	if (Parse == nil) then
-		return true, SendMessageFailure(Player, Reason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(Reason)), 0
 	end
 
 	-- 1.12.2 takes a player name or a target selector; a non-player match is not a target of this command:
 	local Targets, ResolveReason = ResolveTargets(Parse.Targets, MakeSelectorContext(Player, Origin), "player")
 	if (Targets == nil) then
-		return true, SendMessageFailure(Player, ResolveReason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(ResolveReason)), 0
 	end
 
 	local ReachedName = nil
@@ -41,7 +41,7 @@ function HandleTellrawCommand(Split, Player, EntireCommand, Origin)
 	)
 
 	if (Reached == 0) then
-		return true, SendMessageFailure(Player, "No player was reached"), 0
+		return true, SendMessageFailure(Player, MakeChatSafe("No player was reached")), 0
 	end
 
 	if (Reached == 1) then

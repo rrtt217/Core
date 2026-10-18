@@ -22,7 +22,10 @@
 -- Everything here is a pure function of its inputs except CheckTextComponent(), which calls the engine's JSON
 -- parser (cJson:Parse); tests/test_presentation_commands.lua stubs cJson with a small parser of its own.
 
--- luacheck: new globals CutRawRemainder CheckTextComponent ParseTextArgument CheckChatDeliverable
+-- The helpers below are read from the command handlers and from the tests, so luacheck counts them as unused
+-- globals in this file (131 == "unused global variable").
+-- luacheck: ignore 131
+-- luacheck: new globals CutRawRemainder CheckTextComponent ParseTextArgument CheckChatDeliverable MakeChatSafe
 -- luacheck: globals SplitRawCommand cJson
 
 -- The component keys the server has to resolve before a client can show them. A 1.12.2 client that receives
@@ -133,11 +136,30 @@ end
 --- Returns a reason when a_Text cannot be delivered through the chat packet, nil when it can.
 -- cProtocol_1_8_0::SendChatRaw() drops every message containing "${", so the command layer refuses such text
 -- instead of reporting a success for a message the client never receives (spec section 5).
+-- The reason itself must not contain the sequence either, or the chat packet would drop the explanation as
+-- well - hence the description instead of the characters (see MakeChatSafe()).
 function CheckChatDeliverable(a_Text)
 	if (type(a_Text) == "string") and (a_Text:find(FORBIDDEN_CHAT_SEQUENCE, 1, true) ~= nil) then
-		return "A message containing \"" .. FORBIDDEN_CHAT_SEQUENCE .. "\" cannot be sent"
+		return "A message containing a dollar sign followed by an opening brace cannot be sent"
 	end
 	return nil
+end
+
+
+
+
+
+
+--- Returns a_Text with the sequence the chat packet refuses to send broken up, so that the message survives.
+-- Every reason the parsers produce may quote what the player typed, and the guard in
+-- cProtocol_1_8_0::SendChatRaw() drops the *whole* message when it contains "${" - including the error message
+-- that explains the problem. The sequence is written as "$ {" instead, so the player still sees which
+-- characters were meant.
+function MakeChatSafe(a_Text)
+	if (type(a_Text) ~= "string") then
+		return a_Text
+	end
+	return (a_Text:gsub("%${", "$ {"))
 end
 
 

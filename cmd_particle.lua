@@ -15,12 +15,13 @@
 -- luacheck: ignore 131
 -- luacheck: new globals HandleParticleCommand HandleConsoleParticle
 -- luacheck: globals SendMessageFailure SendMessageSuccess ParseParticleLine ParseCommandCoords GetOriginPosition
+-- luacheck: globals MakeChatSafe
 -- luacheck: globals Vector3f cRoot
 
 function HandleParticleCommand(Split, Player, _, Origin)
 	local Parse, Reason = ParseParticleLine(Split)
 	if (Parse == nil) then
-		return true, SendMessageFailure(Player, Reason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(Reason)), 0
 	end
 
 	-- The command's world and position: the origin first (a command block or /execute supplies its own),
@@ -46,7 +47,7 @@ function HandleParticleCommand(Split, Player, _, Origin)
 	local X, Y, Z = ParseCommandCoords(Parse.X, Parse.Y, Parse.Z, Position)
 	local OffsetX, OffsetY, OffsetZ = ParseCommandCoords(Parse.OffsetX, Parse.OffsetY, Parse.OffsetZ, Position)
 	if (X == nil) or (OffsetX == nil) then
-		return true, SendMessageFailure(Player, "The coordinates could not be resolved"), 0
+		return true, SendMessageFailure(Player, MakeChatSafe("The coordinates could not be resolved")), 0
 	end
 
 	World:BroadcastParticleEffect(

@@ -17,7 +17,7 @@
 -- luacheck: ignore 131
 -- luacheck: new globals HandleStopsoundCommand HandleConsoleStopsound
 -- luacheck: globals SendMessageFailure SendMessageSuccess ResolveTargets ApplyToTargets GetTargetName
--- luacheck: globals MakeSelectorContext ParseStopsoundLine BuildStopSoundPayload
+-- luacheck: globals MakeSelectorContext MakeChatSafe ParseStopsoundLine BuildStopSoundPayload
 
 -- The vanilla channel name, as captured. It is a 1.12.2-era name: 1.13 replaced it with the Stop Sound
 -- packet, so a 1.13+ client ignores this message (spec section 5).
@@ -46,13 +46,13 @@ end
 function HandleStopsoundCommand(Split, Player, _, Origin)
 	local Parse, Reason = ParseStopsoundLine(Split)
 	if (Parse == nil) then
-		return true, SendMessageFailure(Player, Reason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(Reason)), 0
 	end
 
 	-- 1.12.2 takes a player name or a target selector; a non-player match is not a target of this command:
 	local Targets, ResolveReason = ResolveTargets(Parse.Targets, MakeSelectorContext(Player, Origin), "player")
 	if (Targets == nil) then
-		return true, SendMessageFailure(Player, ResolveReason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(ResolveReason)), 0
 	end
 
 	local Payload = BuildStopSoundPayload(Parse.Source, Parse.Sound)
@@ -70,7 +70,7 @@ function HandleStopsoundCommand(Split, Player, _, Origin)
 	)
 
 	if (Reached == 0) then
-		return true, SendMessageFailure(Player, "No player was reached"), 0
+		return true, SendMessageFailure(Player, MakeChatSafe("No player was reached")), 0
 	end
 
 	local Scope = DescribeScope(Parse)

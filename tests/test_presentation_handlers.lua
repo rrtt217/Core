@@ -39,6 +39,7 @@ dofile(ScriptDir .. "/../cmd_tellraw.lua")
 -- luacheck: ignore 131
 -- luacheck: new globals cRoot cJson cCompositeChat ctAboveActionBar Vector3d Vector3f
 -- luacheck: new globals ResolveTargets MakeSelectorContext SendMessageFailure SendMessageSuccess
+-- luacheck: globals CheckChatDeliverable
 -- luacheck: globals HandleTitleCommand HandleParticleCommand HandlePlaysoundCommand
 -- luacheck: globals HandleStopsoundCommand HandleTellrawCommand ApplyToTargets
 
@@ -269,6 +270,23 @@ end
 
 
 
+--- Checks that the player was told something, and that the text itself survives the chat packet's guard.
+local function CheckReported(a_Snippet, a_Message)
+	Check(LastMessage ~= nil, a_Message .. ": the player is told something")
+	if (LastMessage ~= nil) then
+		Check(
+			LastMessage:find(a_Snippet, 1, true) ~= nil,
+			string.format("%s: the text mentions \"%s\" (got %s)", a_Message, a_Snippet, LastMessage)
+		)
+		CheckEquals(CheckChatDeliverable(LastMessage), nil, a_Message .. ": the text is deliverable")
+	end
+end
+
+
+
+
+
+
 local function TestTitleModes()
 	-- The plain-text title goes through cCompositeChat, which renders the "&" codes:
 	local Player, Client = Run(HandleTitleCommand, "/title @s title Hello")
@@ -288,6 +306,15 @@ local function TestTitleModes()
 	Client = RunClient(HandleTitleCommand, "/title @s subtitle {\"text\":\"Sub\"}")
 	Call = FindCall(Client.Calls, "SendSetRawSubTitle")
 	Check(Call ~= nil and Call.Args[1] == "{\"text\":\"Sub\"}", "/title subtitle sends a JSON component verbatim")
+
+	-- Regression: the refusal reason used to contain "${" itself, so the chat packet dropped the explanation
+	-- and the command looked like it had done nothing at all.
+	local UndeliverablePlayer = Run(HandleTitleCommand, "/title @s actionbar a${b}")
+	Check(
+		FindCall(UndeliverablePlayer.Calls, "SendAboveActionBarMessage") == nil,
+		"an undeliverable action bar sends nothing"
+	)
+	CheckReported("dollar sign", "an undeliverable action bar")
 
 	-- The action bar is the one mode that uses cPlayer, not the client handle:
 	local ActionPlayer, ActionClient = Run(HandleTitleCommand, "/title @s actionbar Bar")
@@ -348,7 +375,11 @@ local function TestParticleBroadcast()
 	Overworld.Calls = {}
 	Run(HandleParticleCommand, "/particle dust ~ ~ ~ 0 0 0 1")
 	CheckEquals(#Overworld.Calls, 0, "an unknown particle is not broadcast")
-	Check(LastMessage ~= nil and LastMessage:find("Unknown particle", 1, true) ~= nil, "and it is reported")
+	CheckReported("Unknown particle", "an unknown particle")
+
+	-- The reason quotes the token, so a token containing "${" would make the reason itself undeliverable:
+	Run(HandleParticleCommand, "/particle ${x} ~ ~ ~ 0 0 0 1")
+	CheckReported("$ {x}", "an unknown particle whose name contains the forbidden sequence")
 end
 
 
@@ -436,10 +467,11 @@ local function TestTellrawMessage()
 	-- Refused components never reach a player:
 	Run(HandleTellrawCommand, "/tellraw @s {\"selector\":\"@s\"}")
 	Check(FindCall(Subject.Calls, "SendMessageRaw") == nil, "a server-side component sends nothing")
-	Check(LastMessage ~= nil and LastMessage:find("selector", 1, true) ~= nil, "and it is reported")
+	CheckReported("selector", "a server-side component")
 
 	Run(HandleTellrawCommand, "/tellraw @s {\"text\":\"${x}\"}")
 	Check(FindCall(Subject.Calls, "SendMessageRaw") == nil, "a message the chat packet would drop sends nothing")
+	CheckReported("dollar sign", "a message the chat packet would drop")
 end
 
 

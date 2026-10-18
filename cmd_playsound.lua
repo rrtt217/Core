@@ -16,7 +16,8 @@
 -- luacheck: ignore 131
 -- luacheck: new globals HandlePlaysoundCommand HandleConsolePlaysound
 -- luacheck: globals SendMessageFailure SendMessageSuccess ResolveTargets ApplyToTargets
--- luacheck: globals MakeSelectorContext ParsePlaysoundLine GetAudibleRadius GetOriginPosition ParseCommandCoords
+-- luacheck: globals MakeSelectorContext MakeChatSafe ParsePlaysoundLine GetAudibleRadius GetOriginPosition
+-- luacheck: globals ParseCommandCoords
 -- luacheck: globals Vector3d
 
 --- Returns the squared distance between a_Target's position and the point (a_X, a_Y, a_Z).
@@ -37,14 +38,14 @@ end
 function HandlePlaysoundCommand(Split, Player, _, Origin)
 	local Parse, Reason = ParsePlaysoundLine(Split)
 	if (Parse == nil) then
-		return true, SendMessageFailure(Player, Reason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(Reason)), 0
 	end
 
 	-- 1.12.2 takes a player name or a target selector, and the 1.8 note on the page is explicit that even
 	-- "@e" cannot reach non-players here, so the selector layer filters down to players:
 	local Targets, ResolveReason = ResolveTargets(Parse.Targets, MakeSelectorContext(Player, Origin), "player")
 	if (Targets == nil) then
-		return true, SendMessageFailure(Player, ResolveReason), 0
+		return true, SendMessageFailure(Player, MakeChatSafe(ResolveReason)), 0
 	end
 
 	-- Omitting the coordinates means "where the command runs": resolving a missing triple as "~" against the
@@ -56,7 +57,7 @@ function HandlePlaysoundCommand(Split, Player, _, Origin)
 
 	local X, Y, Z = ParseCommandCoords(Parse.X or "~", Parse.Y or "~", Parse.Z or "~", Position)
 	if (X == nil) then
-		return true, SendMessageFailure(Player, "The coordinates could not be resolved"), 0
+		return true, SendMessageFailure(Player, MakeChatSafe("The coordinates could not be resolved")), 0
 	end
 
 	-- A sound at <volume> is audible inside a sphere of volume * 16 blocks; <minimumVolume> is the volume
@@ -93,7 +94,7 @@ function HandlePlaysoundCommand(Split, Player, _, Origin)
 
 	-- 1.12.2 "fails ... if the targets are unable to hear the sound from where it is played":
 	if (Reached == 0) then
-		return true, SendMessageFailure(Player, "No target was able to hear the sound"), 0
+		return true, SendMessageFailure(Player, MakeChatSafe("No target was able to hear the sound")), 0
 	end
 
 	if (Reached == 1) then

@@ -33,7 +33,7 @@ dofile(ScriptDir .. "/../command_text.lua")
 
 -- luacheck: globals ParseTitleLine ParseParticleLine ParsePlaysoundLine ParseTellrawLine ParseStopsoundLine
 -- luacheck: globals IsKnownParticleName IsKnownSoundSource GetAudibleRadius BuildStopSoundPayload
--- luacheck: globals CutRawRemainder CheckTextComponent ParseTextArgument CheckChatDeliverable
+-- luacheck: globals CutRawRemainder CheckTextComponent ParseTextArgument CheckChatDeliverable MakeChatSafe
 -- luacheck: globals SplitRawCommand cJson
 
 local NumPassed = 0
@@ -752,7 +752,15 @@ local function TestTextComponents()
 	-- The chat packet refuses "${", so the command layer reports it instead of claiming a success:
 	CheckEquals(CheckChatDeliverable("{\"text\":\"hi\"}"), nil, "ordinary text is deliverable")
 	local Forbidden = CheckChatDeliverable("{\"text\":\"${jndi}\"}")
-	Check((Forbidden ~= nil) and (Forbidden:find("${", 1, true) ~= nil), "the ${ sequence is refused")
+	Check(Forbidden ~= nil, "the ${ sequence is refused")
+	-- ... and the reason must itself be deliverable, or the chat packet drops the explanation too:
+	CheckEquals(CheckChatDeliverable(Forbidden), nil, "the refusal reason survives the same guard")
+
+	-- A reason that quotes user input has to be made deliverable before it is sent:
+	CheckEquals(MakeChatSafe("Unknown particle \"${x}\""), "Unknown particle \"$ {x}\"", "the sequence is broken up")
+	CheckEquals(CheckChatDeliverable(MakeChatSafe("a${b}c${d}")), nil, "the result is deliverable")
+	CheckEquals(MakeChatSafe("no sequence here"), "no sequence here", "ordinary text is left alone")
+	CheckEquals(MakeChatSafe("$${"), "$$ {", "only the sequence itself is broken up")
 
 	-- ParseTextArgument() picks the JSON form only for an argument that starts like JSON:
 	local Argument = ParseTextArgument("{\"text\":\"Hi\"}", "{text:Hi}")
@@ -820,11 +828,12 @@ local function TestTellraw()
 		"selector",
 		"the server-side selector component"
 	)
+	-- The reason describes the characters instead of quoting them, or it would be dropped as well:
 	CheckRefused(
 		function ()
 			return ParseTellrawLine({ "/tellraw", "@a", "{\"text\":\"${x}\"}" }, "/tellraw @a {\"text\":\"${x}\"}")
 		end,
-		"${",
+		"dollar sign",
 		"a message the chat packet would drop"
 	)
 
