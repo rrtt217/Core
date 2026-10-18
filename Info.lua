@@ -556,6 +556,20 @@ g_PluginInfo =
 			HelpString = "Sets the spawn point for a player.",
 		},
 
+		["/spreadplayers"] =
+		{
+			Permission = "core.spreadplayers",
+			Handler = HandleSpreadplayersCommand,
+			HelpString = "Spreads the targets randomly on the surface around the given centre.",
+			ParameterCombinations =
+			{
+				{
+					Params = "x z spreadDistance maxRange respectTeams player ...",
+					Help = "Spreads the targets on the surface of a square around (x, z).",
+				},
+			},
+		},
+
 		["/stopsound"] =
 		{
 			Permission = "core.stopsound",
@@ -597,6 +611,24 @@ g_PluginInfo =
 			Permission = "core.summon",
 			Handler = HandleSummonCommand,
 			HelpString = "Summons an entity in the world.",
+		},
+
+		["/teleport"] =
+		{
+			Permission = "core.teleport",
+			Handler = HandleTeleportCommand,
+			HelpString = "Teleports entities to the given position (relative coordinates use the command position).",
+			ParameterCombinations =
+			{
+				{
+					Params = "target x y z",
+					Help = "Teleports the targets to the given position.",
+				},
+				{
+					Params = "target x y z y-rot x-rot",
+					Help = "Teleports the targets to the given position and rotation.",
+				},
+			},
 		},
 
 		["/tell"] = 
@@ -1418,6 +1450,12 @@ g_PluginInfo =
 			HelpString = "Sets the spawn point of the default world (vanilla name).",
 		},
 
+		["spreadplayers"] =
+		{
+			Handler = HandleConsoleSpreadplayers,
+			HelpString = "Spreads the targets randomly on the surface around the given centre.",
+		},
+
 		["stopsound"] =
 		{
 			Handler = HandleConsoleStopsound,
@@ -1569,6 +1607,12 @@ g_PluginInfo =
 					Help = "Changes the weather in the specified world, rather than the default world.",
 				},
 			},
+		},
+
+		["teleport"] =
+		{
+			Handler = HandleConsoleTeleportCommand,
+			HelpString = "Teleports entities to the given position (vanilla syntax).",
 		},
 
 		["tp"] =
