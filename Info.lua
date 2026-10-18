@@ -58,6 +58,20 @@ g_PluginInfo =
 			HelpString = "Clears the inventory of a player.",
 		},
 
+		["/clone"] =
+		{
+			Permission = "core.clone",
+			Handler = HandleCloneCommand,
+			HelpString = "Clones a region of blocks to another place.",
+			ParameterCombinations =
+			{
+				{
+					Params = "x1 y1 z1 x2 y2 z2 x y z [maskMode] [cloneMode] [TileName] [dataValue]",
+					Help = "Clones the source region to the destination corner.",
+				},
+			},
+		},
+
 		["/do"] = 
 		{
 			Permission = "core.do",
@@ -111,6 +125,20 @@ g_PluginInfo =
 				{
 					Params = "entity x y z detect x2 y2 z2 block dataValue command",
 					Help = "Runs the command only when the block at x2 y2 z2 (relative to x y z) is the given block.",
+				},
+			},
+		},
+
+		["/fill"] =
+		{
+			Permission = "core.fill",
+			Handler = HandleFillCommand,
+			HelpString = "Fills a region of blocks with the given block.",
+			ParameterCombinations =
+			{
+				{
+					Params = "x1 y1 z1 x2 y2 z2 block [dataValue] [oldBlockHandling]",
+					Help = "Fills the region; oldBlockHandling is destroy, hollow, keep, outline or replace.",
 				},
 			},
 		},
@@ -517,6 +545,20 @@ g_PluginInfo =
 			HelpString = "Shows the seed of the given world name or current world, if not given.",
 		},
 
+		["/setblock"] =
+		{
+			Permission = "core.setblock",
+			Handler = HandleSetBlockCommand,
+			HelpString = "Changes a single block.",
+			ParameterCombinations =
+			{
+				{
+					Params = "x y z block [dataValue] [oldBlockHandling]",
+					Help = "Places the block; oldBlockHandling is destroy, keep or replace.",
+				},
+			},
+		},
+
 		["/setspawn"] = 
 		{
 			Permission = "core.setspawn",
@@ -674,6 +716,20 @@ g_PluginInfo =
 				{
 					Params = "x y z block dataValue",
 					Help = "Tests for the given block and data value (-1 matches any data value) at x y z.",
+				},
+			},
+		},
+
+		["/testforblocks"] =
+		{
+			Permission = "core.testforblocks",
+			Handler = HandleTestforblocksCommand,
+			HelpString = "Tests whether two regions of blocks match.",
+			ParameterCombinations =
+			{
+				{
+					Params = "x1 y1 z1 x2 y2 z2 x y z [all|masked]",
+					Help = "Compares the source region with the destination region.",
 				},
 			},
 		},
@@ -1764,6 +1820,30 @@ g_PluginInfo =
 		{
 			Handler = HandleConsoleXP,
 			HelpString = "Adds experience points (or, with an L suffix, levels) to a player.",
+		},
+
+		["clone"] =
+		{
+			Handler = HandleConsoleClone,
+			HelpString = "Clones a region of blocks to another place.",
+		},
+
+		["fill"] =
+		{
+			Handler = HandleConsoleFill,
+			HelpString = "Fills a region of blocks with the given block.",
+		},
+
+		["setblock"] =
+		{
+			Handler = HandleConsoleSetBlock,
+			HelpString = "Changes a single block.",
+		},
+
+		["testforblocks"] =
+		{
+			Handler = HandleConsoleTestforblocks,
+			HelpString = "Tests whether two regions of blocks match.",
 		},
 	},  -- ConsoleCommands
 	Permissions = 
