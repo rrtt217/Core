@@ -65,6 +65,16 @@ scenario
 			"stopsound",
 			"weather",
 			"minecraft:weather.rain",
+			-- /scoreboard teams arguments (the subcommand, its verbs, an option key and value, the display
+			-- slots, and the sentinel "count" that used to reach cScoreboard.dsCount):
+			"teams",
+			"join",
+			"leave",
+			"friendlyfire",
+			"true",
+			"belowName",
+			"count",
+			"sidebar.team.red",
 		},
 		-- /execute needs five arguments before its command body, so short argument lists can only reach its
 		-- usage message; six is the smallest length that reaches the real parsing:

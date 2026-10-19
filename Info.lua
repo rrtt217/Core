@@ -557,6 +557,43 @@ g_PluginInfo =
 						},
 					},
 				},
+				teams =
+				{
+					HelpString = "Manage Teams",
+					Permission = "core.scoreboard.teams",
+					Handler = HandleScoreboardTeamsCommand,
+					ParameterCombinations =
+					{
+						{
+							Params = "add name [display name...]",
+							Help = "Create a new team with the given internal name and the optional display name.",
+						},
+						{
+							Params = "remove name",
+							Help = "Delete the named team from the scoreboard system.",
+						},
+						{
+							Params = "empty name",
+							Help = "Remove all members from the named team.",
+						},
+						{
+							Params = "join team [targets...]",
+							Help = "Put the given targets on the team; without targets, the command's player joins.",
+						},
+						{
+							Params = "leave [targets...]",
+							Help = "Remove the given targets from their teams; without targets, the command's player leaves.",
+						},
+						{
+							Params = "list [team]",
+							Help = "List all teams with their display names and member counts, or the named team.",
+						},
+						{
+							Params = "option team option value",
+							Help = "Change a team option (friendlyfire, seeFriendlyInvisibles).",
+						},
+					},
+				},
 			},
 		},
 
@@ -1529,6 +1566,43 @@ g_PluginInfo =
 						{
 							Params = "operation targetPlayer targetObjective operation sourcePlayer sourceObjective",
 							Help = "Applies an arithmetic operation altering the target's scores in the target objective, using source's scores in the source objective as input",
+						},
+					},
+				},
+				teams =
+				{
+					HelpString = "Manage Teams",
+					Permission = "core.scoreboard.teams",
+					Handler = HandleConsoleScoreboardTeams,
+					ParameterCombinations =
+					{
+						{
+							Params = "add name [display name...]",
+							Help = "Create a new team with the given internal name and the optional display name.",
+						},
+						{
+							Params = "remove name",
+							Help = "Delete the named team from the scoreboard system.",
+						},
+						{
+							Params = "empty name",
+							Help = "Remove all members from the named team.",
+						},
+						{
+							Params = "join team [targets...]",
+							Help = "Put the given targets on the team.",
+						},
+						{
+							Params = "leave [targets...]",
+							Help = "Remove the given targets from their teams.",
+						},
+						{
+							Params = "list [team]",
+							Help = "List all teams with their display names and member counts, or the named team.",
+						},
+						{
+							Params = "option team option value",
+							Help = "Change a team option (friendlyfire, seeFriendlyInvisibles).",
 						},
 					},
 				},
