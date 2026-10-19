@@ -127,7 +127,7 @@ function HandleScoreboardPlayersCommand(Split, Player)
 	end
 
 	local ResetAllObjectives = function(Objective)
-		Objetive:ResetScore(TargetedPlayer)
+		Objective:ResetScore(TargetedPlayer)
 	end
 
 	if not Split[3] then
