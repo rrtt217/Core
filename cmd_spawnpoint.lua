@@ -1,5 +1,26 @@
 -- luacheck: globals ResolveTargets ApplyToTargets MakeSelectorContext SendMessageFailure
--- luacheck: globals ParseCommandCoords GetOriginPosition
+-- luacheck: globals ParseCommandCoords GetOriginPosition GetSpawnPositionRangeReason
+
+local MAX_SPAWN_HORIZONTAL = 30000000
+local MAX_SPAWN_Y = 256
+
+
+
+--- Validates the 1.12.2 <x> <y> <z> range of /spawnpoint (spec section 2).
+-- The 1.12.2 page states: x and z must be integers within -30,000,000 to 30,000,000 (inclusive),
+-- y an integer between 0 and 256 (inclusive). Returns nil when the position is acceptable.
+function GetSpawnPositionRangeReason(a_X, a_Y, a_Z)
+	if ((math.abs(a_X) > MAX_SPAWN_HORIZONTAL) or (math.abs(a_Z) > MAX_SPAWN_HORIZONTAL)) then
+		return "The x and z coordinates must be between -30,000,000 and 30,000,000"
+	end
+	if ((a_Y < 0) or (a_Y > MAX_SPAWN_Y)) then
+		return "The y coordinate must be between 0 and 256"
+	end
+	return nil
+end
+
+
+
 function HandleSpawnPointCommand(Split, Player, _, Origin)
 	local Response
 	local SuccessCount = 0
@@ -35,12 +56,22 @@ function HandleSpawnPointCommand(Split, Player, _, Origin)
 		end
 
 		if Split[5] then
-			local Reason
-			X, Y, Z, Reason = ParseCommandCoords(Split[3], Split[4], Split[5], BasePosition)
-			if (X == nil) then
-				Response = SendMessageFailure(ActingPlayer, Reason)
+			-- ParseCommandCoords() returns X, Y, Z on success and nil, reason on failure, so the
+			-- reason arrives in the second value (a four-variable assignment used to read it from the
+			-- fourth one, which was always nil and produced an empty failure message):
+			local ParsedX, ParsedY, ParsedZ = ParseCommandCoords(Split[3], Split[4], Split[5], BasePosition)
+			if (ParsedX == nil) then
+				Response = SendMessageFailure(ActingPlayer, ParsedY)
 				return
 			end
+
+			local RangeReason = GetSpawnPositionRangeReason(ParsedX, ParsedY, ParsedZ)
+			if (RangeReason ~= nil) then
+				Response = SendMessageFailure(ActingPlayer, RangeReason)
+				return
+			end
+
+			X, Y, Z = ParsedX, ParsedY, ParsedZ
 		end
 		
 		if Split[6] then
