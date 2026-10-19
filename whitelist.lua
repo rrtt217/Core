@@ -327,8 +327,9 @@ end
 
 
 function HandleWhitelistOffCommand(a_Split, a_Player)
-	g_IsWhitelistEnabled = true
-	SaveConfig()
+	-- Use the same API as the console command: writing g_IsWhitelistEnabled directly is how the
+	-- flag ended up inverted here (the handler used to set it to true while reporting "disabled").
+	WhitelistDisable()
 	a_Player:SendMessageSuccess("Whitelist is disabled.")
 	return true
 end
@@ -338,8 +339,7 @@ end
 
 
 function HandleWhitelistOnCommand(a_Split, a_Player)
-	g_IsWhitelistEnabled = true
-	SaveConfig()
+	WhitelistEnable()
 	a_Player:SendMessageSuccess("Whitelist is enabled.")
 	NotifyWhitelistEmpty(a_Player)
 	return true
