@@ -1,3 +1,4 @@
+-- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess
 local LastSender = {}
 
 function HandleTellCommand(Split, Player)
@@ -38,8 +39,13 @@ function HandleTellCommand(Split, Player)
 		elseif "CuberiteServerConsoleSender" == LastSender[SenderUUID] then
 			SendPrivateMessage()
 		else
+			-- The reply target is stored as a UUID; resolving it can fail (offline mode, or a player
+			-- the Mojang API does not know), and passing the empty name to FindAndDoWithPlayer() used
+			-- to raise a Lua error ("Expected a non-empty string for parameter #1"):
 			local ReceiverName = cMojangAPI:GetPlayerNameFromUUID(LastSender[SenderUUID], true)
-			if not cRoot:Get():FindAndDoWithPlayer(ReceiverName, SendPrivateMessage) then
+			if (ReceiverName == nil) or (ReceiverName == "") then
+				Response = SendMessageFailure(Player, "Could not find the player you are replying to")
+			elseif not cRoot:Get():FindAndDoWithPlayer(ReceiverName, SendPrivateMessage) then
 				Response = SendMessageFailure(Player, "Player \"" .. ReceiverName .. "\" not found")
 			end
 		end
