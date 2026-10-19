@@ -83,10 +83,41 @@ local function CommonAddTime( World, Time )
 end
 
 
+
+--- Resolves the optional [world] argument of a /time subcommand.
+-- Reports an unknown world itself (in-game: chat, console: log) and returns nil, true so the caller
+-- knows the failure has already been explained (it used to return silently).
+-- Returns World, false when the world resolved (or when no world was given).
+local function GetTimeWorld(Split, a_Index, Player)
+	local WorldName = Split[a_Index]
+	if (WorldName == nil) or (WorldName == "") then
+		return GetWorld(nil, Player), false
+	end
+
+	local World = GetWorld(WorldName, Player)
+	if (World == nil) then
+		local Message = "There is no world \"" .. WorldName .. "\""
+		if Player then
+			SendMessage(Player, Message)
+		else
+			LOG(Message)
+		end
+		return nil, true
+	end
+	return World, false
+end
+
+
+
 -- Handler for "/time add <amount> [world]" subcommand 
 function HandleAddTimeCommand( Split, Player )
 
-	if not CommonAddTime( GetWorld( Split[4], Player ), Split[3] ) then
+	local World, Reported = GetTimeWorld( Split, 4, Player )
+	if Reported then
+		return true
+	end
+
+	if not CommonAddTime( World, Split[3] ) then
 		SendMessage( Player, PlayerTimeAddCommandUsage )
 	end
 
@@ -97,7 +128,12 @@ end
 -- Handler for console command: time add <value> [WorldName]
 function HandleConsoleAddTime(a_Split)
 
-	if not CommonAddTime( GetWorld( a_Split[4] ), a_Split[3] ) then
+	local World, Reported = GetTimeWorld( a_Split, 4, nil )
+	if Reported then
+		return true
+	end
+
+	if not CommonAddTime( World, a_Split[3] ) then
 		LOG(ConsoleAddTimeCommandUsage)
 	end
 
@@ -129,7 +165,12 @@ end
 -- Handler for "/time set <value> [world]" subcommand 
 function HandleSetTimeCommand( Split, Player )
 
-	if not CommonSetTime( GetWorld( Split[4], Player ), Split[3] ) then
+	local World, Reported = GetTimeWorld( Split, 4, Player )
+	if Reported then
+		return true
+	end
+
+	if not CommonSetTime( World, Split[3] ) then
 		SendMessage( Player, PlayerTimeSetCommandUsage )
 	end
 
@@ -141,7 +182,12 @@ end
 -- Handler for console command: time set <day|night|value> [world]
 function HandleConsoleSetTime(a_Split)
 
-	if not CommonSetTime( GetWorld( a_Split[4] ), a_Split[3] ) then
+	local World, Reported = GetTimeWorld( a_Split, 4, nil )
+	if Reported then
+		return true
+	end
+
+	if not CommonSetTime( World, a_Split[3] ) then
 		LOG(ConsoleSetTimeCommandUsage)
 	end
 	
@@ -166,7 +212,12 @@ end
 -- Handler for /time <day|night> [world]
 function HandleSpecialTimeCommand( Split, Player )
 
-	return CommonSpecialTime( GetWorld( Split[3], Player ), Split[2] )
+	local World, Reported = GetTimeWorld( Split, 3, Player )
+	if Reported then
+		return true
+	end
+
+	return CommonSpecialTime( World, Split[2] )
 
 end
 
@@ -174,7 +225,12 @@ end
 -- Handler for console command: time <day|night> [world]
 function HandleConsoleSpecialTime(a_Split)
 
-	return CommonSpecialTime( GetWorld( a_Split[3] ), a_Split[2] )
+	local World, Reported = GetTimeWorld( a_Split, 3, nil )
+	if Reported then
+		return true
+	end
+
+	return CommonSpecialTime( World, a_Split[2] )
 
 end
 
@@ -182,10 +238,8 @@ end
 -- Handler for /time query daytime [world]
 function HandleQueryDaytimeCommand( Split, Player )
 
-	local World = GetWorld( Split[4], Player )
-
-	-- Stop if an invalid world was given
-	if not World then
+	local World, Reported = GetTimeWorld( Split, 4, Player )
+	if Reported then
 		return true
 	end
 
@@ -198,10 +252,8 @@ end
 -- Handler for console command: time query daytime [world]
 function HandleConsoleQueryDaytime(a_Split)
 
-	local World = GetWorld( a_Split[4] )
-
-	-- Stop if an invalid world was given
-	if not World then
+	local World, Reported = GetTimeWorld( a_Split, 4, nil )
+	if Reported then
 		return true
 	end
 
@@ -214,10 +266,8 @@ end
 -- Handler for /time query gametime [world]
 function HandleQueryGametimeCommand( Split, Player )
 
-	local World = GetWorld( Split[4], Player )
-
-	-- Stop if an invalid world was given
-	if not World then
+	local World, Reported = GetTimeWorld( Split, 4, Player )
+	if Reported then
 		return true
 	end
 
@@ -230,10 +280,8 @@ end
 -- Handler for console command: time query gametime [world]
 function HandleConsoleQueryGametime(a_Split)
 
-	local World = GetWorld( a_Split[4] )
-
-	-- Stop if an invalid world was given
-	if not World then
+	local World, Reported = GetTimeWorld( a_Split, 4, nil )
+	if Reported then
 		return true
 	end
 
