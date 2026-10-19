@@ -1,3 +1,4 @@
+-- luacheck: globals SendMessage SendMessageFailure SendMessageSuccess
 local Criterias =
 {
 	["achievement"] = cObjective.otAchievement,
@@ -93,6 +94,19 @@ function HandleScoreboardObjectivesCommand(Split, Player)
 	return true, table.concat(MultiLineResponse, "\n")
 end
 
+--- Returns the named objective, or nil after reporting that it does not exist.
+-- The players subcommands used to index the result unconditionally, so an unknown objective raised a
+-- Lua error ("attempt to index local 'TargetedObjective'") and surfaced as a generic command failure.
+local function GetObjectiveOrReport(a_Scoreboard, a_Name, a_Player)
+	local Objective = a_Scoreboard:GetObjective(a_Name)
+	if not Objective then
+		return nil, SendMessageFailure(a_Player, "Unknown objective \"" .. a_Name .. "\"")
+	end
+	return Objective
+end
+
+
+
 function HandleScoreboardPlayersCommand(Split, Player)
 	local Scoreboard
 	local Response
@@ -132,7 +146,10 @@ function HandleScoreboardPlayersCommand(Split, Player)
 			Response = SendMessage(Player, "/scoreboard players reset (<player>)")
 		else
 			if Split[5] then
-				local Objective = Scoreboard:GetObjective(Split[5])
+				local Objective, ObjectiveError = GetObjectiveOrReport(Scoreboard, Split[5], Player)
+				if not Objective then
+					return true, ObjectiveError
+				end
 				Objective:ResetScore(TargetedPlayer)
 			else
 				Scoreboard:ForEachObjective(ResetAllObjectives)
@@ -144,7 +161,10 @@ function HandleScoreboardPlayersCommand(Split, Player)
 		if not Split[4] or not Split[5] then
 			Response = SendMessage(Player, "/scoreboard players get <player> <objective>")
 		else
-			local TargetedObjective = Scoreboard:GetObjective(Split[5])
+			local TargetedObjective, ObjectiveError = GetObjectiveOrReport(Scoreboard, Split[5], Player)
+			if not TargetedObjective then
+				return true, ObjectiveError
+			end
 			Response = SendMessage(Player, TargetedObjective:GetScore(TargetedPlayer))
 		end
 
@@ -152,7 +172,10 @@ function HandleScoreboardPlayersCommand(Split, Player)
 		if not Split[4] or not Split[5] or not Split[6] then
 			Response = SendMessage(Player, "/scoreboard players set <player> <objective> <ammount>")
 		else	
-			local TargetedObjective = Scoreboard:GetObjective(Split[5])
+			local TargetedObjective, ObjectiveError = GetObjectiveOrReport(Scoreboard, Split[5], Player)
+			if not TargetedObjective then
+				return true, ObjectiveError
+			end
 			TargetedObjective:SetScore(TargetedPlayer, Split[6])
 			Response = SendMessageSuccess(Player, "Score " .. Split[6] .. " successfully assigned to " .. TargetedPlayer)
 		end
@@ -161,7 +184,10 @@ function HandleScoreboardPlayersCommand(Split, Player)
 		if not Split[4] or not Split[5] or not Split[6] then
 			Response = SendMessage(Player, "/scoreboard players set <player> <objective> <ammount>")
 		else	
-			local TargetedObjective = Scoreboard:GetObjective(Split[5])
+			local TargetedObjective, ObjectiveError = GetObjectiveOrReport(Scoreboard, Split[5], Player)
+			if not TargetedObjective then
+				return true, ObjectiveError
+			end
 			TargetedObjective:AddScore(TargetedPlayer, Split[6])
 			Response = SendMessageSuccess(Player, "Score " .. Split[6] .. " successfully increased to " .. TargetedPlayer)
 		end
@@ -170,7 +196,10 @@ function HandleScoreboardPlayersCommand(Split, Player)
 		if not Split[4] or not Split[5] or not Split[6] then
 			Response = SendMessage(Player, "/scoreboard players set <player> <objective> <ammount>")
 		else	
-			local TargetedObjective = Scoreboard:GetObjective(Split[5])
+			local TargetedObjective, ObjectiveError = GetObjectiveOrReport(Scoreboard, Split[5], Player)
+			if not TargetedObjective then
+				return true, ObjectiveError
+			end
 			TargetedObjective:SubScore(TargetedPlayer, Split[6])
 			Response = SendMessageSuccess(Player, "Score " .. Split[6] .. " successfully decreased to " .. TargetedPlayer)
 		end
@@ -179,10 +208,16 @@ function HandleScoreboardPlayersCommand(Split, Player)
 		if not Split[4] or not Split[5] or not Split[6] or not Split[7] or not Split[8] then
 			Response = SendMessage(Player, "/scoreboard players operation <targetPlayer> <targetObjective> <operation> <sourcePlayer> <sourceObjective>")
 		else
-			local TargetedObjective = Scoreboard:GetObjective(Split[5])
+			local TargetedObjective, ObjectiveError = GetObjectiveOrReport(Scoreboard, Split[5], Player)
+			if not TargetedObjective then
+				return true, ObjectiveError
+			end
 			local Operator = Split[6]
 			local SourcePlayer = Split[7]
-			local SourceObjective = Scoreboard:GetObjective(Split[8])
+			local SourceObjective, SourceError = GetObjectiveOrReport(Scoreboard, Split[8], Player)
+			if not SourceObjective then
+				return true, SourceError
+			end
 
 			if Operator == "+=" then
 				TargetedObjective:SetScore(TargetedPlayer, TargetedObjective:GetScore(TargetedPlayer) + SourceObjective:GetScore(SourcePlayer))
