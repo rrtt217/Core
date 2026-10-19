@@ -916,7 +916,26 @@ g_PluginInfo =
 		{
 			Permission = "core.teleport",
 			Handler = HandleTPCommand,
-			HelpString = "Teleports your player to another player.",
+			HelpString = "Teleports entities (1.12.2 /tp: relative coordinates use each target's position).",
+			ParameterCombinations =
+			{
+				{
+					Params = "<destination>",
+					Help = "Teleports your player to another entity.",
+				},
+				{
+					Params = "<x> <y> <z> [<yaw> <pitch>]",
+					Help = "Teleports your player to the given position.",
+				},
+				{
+					Params = "<target> <destination>",
+					Help = "Teleports the targets to another entity.",
+				},
+				{
+					Params = "<target> <x> <y> <z> [<yaw> <pitch>]",
+					Help = "Teleports the targets to the given position.",
+				},
+			},
 		},
 
 		["/tps"] = 
@@ -1701,8 +1720,8 @@ g_PluginInfo =
 
 		["tp"] =
 		{
-			Handler =  HandleConsoleTeleport,
-			HelpString = "Teleports a player.",
+			Handler = HandleConsoleTPCommand,
+			HelpString = "Teleports entities (vanilla 1.12.2 /tp syntax).",
 		},
 
 		["tps"] =
