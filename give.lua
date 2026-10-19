@@ -18,6 +18,8 @@ local MessageUnknownError = "< Unknown Error >"
 local MessageGiveSuccessful = "Given [ %s ] x %d"
 local MessageBadAmount = "Amount must be a number"
 local MessageBadData = "Data must be a number"
+local MessageAmountTooSmall = "The number you have entered ( %d ) must be at least 1"
+local MessageBadDataValue = "Data must be at least 0"
 
 local UnbalancedCurleyBracesFailure = "Missing or unexpected '{' or '}' detected"
 local UnbalancedSquareBracketsFailure = "Missing or unexpected '[' or ']' detected"
@@ -187,8 +189,29 @@ local function GiveItemCommand( Split, Player, SafeCommand, a_DirectPlayer )
 	local Amount = tonumber( Split[4] ) or 1
 	local DataValue = tonumber( Split[5] ) or 0
 
-	if not PlayerName or not ItemName or Amount < 1 or DataValue < 0 then
+	if not PlayerName or not ItemName then
 		return false
+	end
+
+	-- A bad amount / data value used to return false silently, so "/give @p stone 0" produced no
+	-- feedback at all (the selector path ignores the return value). Report it like the other
+	-- argument errors above and treat the command as handled:
+	if Amount < 1 then
+		local Message = string.format( MessageAmountTooSmall, Amount )
+		if Player then
+			SendMessageFailure( Player, Message )
+		else
+			LOG( Message )
+		end
+		return true
+	end
+	if DataValue < 0 then
+		if Player then
+			SendMessageFailure( Player, MessageBadDataValue )
+		else
+			LOG( MessageBadDataValue )
+		end
+		return true
 	end
 
 	-- Make sure that if an amount was given, that it was actually a number
