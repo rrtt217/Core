@@ -590,7 +590,7 @@ g_PluginInfo =
 						},
 						{
 							Params = "option team option value",
-							Help = "Change a team option (friendlyfire, seeFriendlyInvisibles).",
+							Help = "Change a team option (color, friendlyfire, seeFriendlyInvisibles, nametagVisibility, collisionRule).",
 						},
 					},
 				},
@@ -1602,7 +1602,7 @@ g_PluginInfo =
 						},
 						{
 							Params = "option team option value",
-							Help = "Change a team option (friendlyfire, seeFriendlyInvisibles).",
+							Help = "Change a team option (color, friendlyfire, seeFriendlyInvisibles, nametagVisibility, collisionRule).",
 						},
 					},
 				},

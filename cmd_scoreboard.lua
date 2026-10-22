@@ -601,6 +601,13 @@ function HandleScoreboardTeamsCommand(Split, Player, EntireCommand, Origin)
 						Team:SetFriendlyFire(Option.Value)
 					elseif (Option.Key == "seeFriendlyInvisibles") then
 						Team:SetCanSeeFriendlyInvisible(Option.Value)
+					elseif (Option.Key == "color") then
+						-- "reset" clears the color; cTeam stores the vanilla color name ("" = no color):
+						Team:SetColor((Option.Value == "reset") and "" or Option.Value)
+					elseif (Option.Key == "nametagVisibility") then
+						Team:SetNameTagVisibility(Option.Value)
+					elseif (Option.Key == "collisionRule") then
+						Team:SetCollisionRule(Option.Value)
 					end
 					Response = SendMessageSuccess(Player, 'Team "' .. TeamName .. '": ' .. Key .. " is now " .. tostring(Option.Value))
 					SuccessCount = 1

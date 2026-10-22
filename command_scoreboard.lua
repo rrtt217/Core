@@ -21,22 +21,46 @@
 SCOREBOARD_NAME_MAX_LENGTH = 16
 SCOREBOARD_DISPLAY_NAME_MAX_LENGTH = 32
 
--- The team option keys this server can store. cTeam exposes AllowsFriendlyFire / CanSeeFriendlyInvisible
--- only; color, nametagVisibility, deathMessageVisibility and collisionRule would need cTeam fields (and a
--- Teams packet to show them) that do not exist yet, so they are recognised and refused with an explicit
--- reason instead of being accepted silently (spec section 5).
+-- The team option keys this server can store and send to the clients in the Teams packet.
+-- deathMessageVisibility is recognised but refused: it has no field in the packet and its chat filter is
+-- not implemented yet (spec section 6-4).
 SCOREBOARD_TEAM_OPTIONS =
 {
+	color = true,
+	collisionRule = true,
 	friendlyfire = true,
+	nametagVisibility = true,
 	seeFriendlyInvisibles = true,
 }
 
 SCOREBOARD_TEAM_OPTIONS_UNSUPPORTED =
 {
-	color = true,
-	nametagVisibility = true,
 	deathMessageVisibility = true,
-	collisionRule = true,
+}
+
+-- The value sets of the 1.12.2 team options (Minecraft Wiki "Scoreboard", Teams commands table).
+local TEAM_COLORS =
+{
+	aqua = true, black = true, blue = true, dark_aqua = true,
+	dark_blue = true, dark_gray = true, dark_green = true, dark_purple = true,
+	dark_red = true, gold = true, gray = true, green = true,
+	light_purple = true, red = true, white = true, yellow = true,
+}
+
+local TEAM_VISIBILITY_VALUES =
+{
+	always = true,
+	hideForOtherTeams = true,
+	hideForOwnTeam = true,
+	never = true,
+}
+
+local TEAM_COLLISION_RULES =
+{
+	always = true,
+	pushOtherTeams = true,
+	pushOwnTeam = true,
+	never = true,
 }
 
 -- The six option keys of 1.12.2, in the order the wiki lists them. Only used by the "unknown option"
@@ -128,17 +152,40 @@ end
 
 
 --- Parses a "teams option" key/value pair.
--- Returns { Key = <key>, Value = <boolean> } on success, or nil plus the reason it was refused.
--- Keys this server cannot store are recognised, so the refusal names the key instead of pretending it is
--- a typo; see SCOREBOARD_TEAM_OPTIONS_UNSUPPORTED.
+-- Returns { Key = <key>, Value = <value> } on success, or nil plus the reason it was refused.
+-- The value types follow 1.12.2: friendlyfire / seeFriendlyInvisibles are true/false, color is a color
+-- name or "reset", and the two rule keys take their documented strings. The one key this server cannot
+-- apply yet is recognised, so the refusal names it instead of pretending it is a typo.
 function ParseScoreboardTeamOption(a_Key, a_Value)
-	if (SCOREBOARD_TEAM_OPTIONS[a_Key]) then
+	if (a_Key == "friendlyfire") or (a_Key == "seeFriendlyInvisibles") then
 		local Value = ParseScoreboardTeamBool(a_Value)
 		if (Value == nil) then
 			return nil, 'The value of "' .. a_Key .. '" must be "true" or "false"'
 		end
 		return { Key = a_Key, Value = Value }
 	end
+
+	if (a_Key == "color") then
+		if ((a_Value == "reset") or (TEAM_COLORS[a_Value])) then
+			return { Key = a_Key, Value = a_Value }
+		end
+		return nil, 'The value of "color" must be a color name or "reset"'
+	end
+
+	if (a_Key == "nametagVisibility") then
+		if (TEAM_VISIBILITY_VALUES[a_Value]) then
+			return { Key = a_Key, Value = a_Value }
+		end
+		return nil, 'The value of "nametagVisibility" must be always, hideForOtherTeams, hideForOwnTeam or never'
+	end
+
+	if (a_Key == "collisionRule") then
+		if (TEAM_COLLISION_RULES[a_Value]) then
+			return { Key = a_Key, Value = a_Value }
+		end
+		return nil, 'The value of "collisionRule" must be always, pushOtherTeams, pushOwnTeam or never'
+	end
+
 	if (SCOREBOARD_TEAM_OPTIONS_UNSUPPORTED[a_Key]) then
 		return nil, 'Team option "' .. a_Key .. '" is not supported by this server yet'
 	end

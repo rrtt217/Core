@@ -127,6 +127,10 @@ local function MakeTeam(a_Name, a_DisplayName)
 		Players = {},
 		FriendlyFire = true,
 		SeeFriendlyInvisible = false,
+		Color = "",
+		NameTagVisibility = "always",
+		CollisionRule = "always",
+		DeathMessageVisibility = "always",
 	}
 	function Team:GetName() return self.Name end
 	function Team:GetDisplayName() return self.DisplayName end
@@ -156,6 +160,14 @@ local function MakeTeam(a_Name, a_DisplayName)
 	function Team:AllowsFriendlyFire() return self.FriendlyFire end
 	function Team:SetCanSeeFriendlyInvisible(a_Value) self.SeeFriendlyInvisible = a_Value end
 	function Team:CanSeeFriendlyInvisible() return self.SeeFriendlyInvisible end
+	function Team:SetColor(a_Value) self.Color = a_Value end
+	function Team:GetColor() return self.Color end
+	function Team:SetNameTagVisibility(a_Value) self.NameTagVisibility = a_Value end
+	function Team:GetNameTagVisibility() return self.NameTagVisibility end
+	function Team:SetCollisionRule(a_Value) self.CollisionRule = a_Value end
+	function Team:GetCollisionRule() return self.CollisionRule end
+	function Team:SetDeathMessageVisibility(a_Value) self.DeathMessageVisibility = a_Value end
+	function Team:GetDeathMessageVisibility() return self.DeathMessageVisibility end
 	return Team
 end
 
@@ -304,9 +316,22 @@ CheckEquals(ParseScoreboardTeamBool("TRUE"), nil, "TRUE is not the documented sp
 CheckEquals(ParseScoreboardTeamBool("1"), nil, "1 is not a boolean")
 CheckEquals(ParseScoreboardTeamOption("friendlyfire", "false").Value, false, "friendlyfire parses")
 CheckEquals(ParseScoreboardTeamOption("seeFriendlyInvisibles", "true").Value, true, "seeFriendlyInvisibles parses")
-local Option, Reason = ParseScoreboardTeamOption("color", "red")
-CheckEquals(Option, nil, "color is refused")
-Check(Reason ~= nil and Reason:find("not supported", 1, true) ~= nil, "the color refusal names the engine gap")
+CheckEquals(ParseScoreboardTeamOption("color", "red").Value, "red", "a color name parses")
+CheckEquals(ParseScoreboardTeamOption("color", "reset").Value, "reset", "color reset parses")
+local Option, Reason = ParseScoreboardTeamOption("color", "bogus")
+CheckEquals(Option, nil, "an unknown color name is refused")
+Check(Reason ~= nil and Reason:find("color name", 1, true) ~= nil, "the color refusal names the accepted values")
+CheckEquals(ParseScoreboardTeamOption("nametagVisibility", "never").Value, "never", "nametagVisibility parses")
+Option, Reason = ParseScoreboardTeamOption("nametagVisibility", "sometimes")
+CheckEquals(Option, nil, "an unknown nametagVisibility value is refused")
+Check(Reason ~= nil and Reason:find("hideForOwnTeam", 1, true) ~= nil, "the nametagVisibility refusal lists the values")
+CheckEquals(ParseScoreboardTeamOption("collisionRule", "pushOtherTeams").Value, "pushOtherTeams", "collisionRule parses")
+Option, Reason = ParseScoreboardTeamOption("collisionRule", "sometimes")
+CheckEquals(Option, nil, "an unknown collisionRule value is refused")
+Check(Reason ~= nil and Reason:find("pushOwnTeam", 1, true) ~= nil, "the collisionRule refusal lists the values")
+Option, Reason = ParseScoreboardTeamOption("deathMessageVisibility", "never")
+CheckEquals(Option, nil, "deathMessageVisibility is still refused")
+Check(Reason ~= nil and Reason:find("not supported", 1, true) ~= nil, "the deathMessageVisibility refusal names the engine gap")
 Option, Reason = ParseScoreboardTeamOption("bogus", "x")
 CheckEquals(Option, nil, "an unknown option is refused")
 Check(Reason ~= nil and Reason:find("Unknown team option", 1, true) ~= nil, "an unknown option is reported as such")
@@ -500,10 +525,32 @@ Run({ "scoreboard", "teams", "option", "red", "seeFriendlyInvisibles", "false" }
 CheckEquals(Teams.red:CanSeeFriendlyInvisible(), false, "option seeFriendlyInvisibles is stored")
 
 Run({ "scoreboard", "teams", "option", "red", "color", "blue" }, Sender)
-Check(HasMessage("not supported by this server yet"), "option color names the engine gap")
+CheckEquals(Teams.red:GetColor(), "blue", "option color is stored")
+Check(HasMessage("color is now blue"), "option color reports success")
+
+Run({ "scoreboard", "teams", "option", "red", "color", "reset" }, Sender)
+CheckEquals(Teams.red:GetColor(), "", "option color reset clears the color")
+
+Run({ "scoreboard", "teams", "option", "red", "color", "bogus" }, Sender)
+Check(HasMessage("must be a color name"), "an unknown color name is refused")
 
 Run({ "scoreboard", "teams", "option", "red", "nametagVisibility", "never" }, Sender)
-Check(HasMessage("not supported by this server yet"), "option nametagVisibility names the engine gap")
+CheckEquals(Teams.red:GetNameTagVisibility(), "never", "option nametagVisibility is stored")
+Check(HasMessage("nametagVisibility is now never"), "option nametagVisibility reports success")
+
+Run({ "scoreboard", "teams", "option", "red", "nametagVisibility", "sometimes" }, Sender)
+Check(HasMessage("hideForOtherTeams"), "an unknown nametagVisibility value is refused")
+
+Run({ "scoreboard", "teams", "option", "red", "collisionRule", "pushOwnTeam" }, Sender)
+CheckEquals(Teams.red:GetCollisionRule(), "pushOwnTeam", "option collisionRule is stored")
+Check(HasMessage("collisionRule is now pushOwnTeam"), "option collisionRule reports success")
+
+Run({ "scoreboard", "teams", "option", "red", "collisionRule", "sometimes" }, Sender)
+Check(HasMessage("pushOtherTeams"), "an unknown collisionRule value is refused")
+
+Run({ "scoreboard", "teams", "option", "red", "deathMessageVisibility", "never" }, Sender)
+Check(HasMessage("not supported by this server yet"), "deathMessageVisibility is still refused")
+CheckEquals(Teams.red:GetDeathMessageVisibility(), "always", "the refused option does not change the team")
 
 Run({ "scoreboard", "teams", "option", "red", "bogus", "x" }, Sender)
 Check(HasMessage("Unknown team option"), "an unknown option key is refused")
