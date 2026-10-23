@@ -19,6 +19,28 @@ g_PluginInfo =
 			HelpString = "Shows the version of the server software.",
 		},
 
+		["/advancement"] =
+		{
+			Permission = "core.advancement",
+			Handler = HandleAdvancementCommand,
+			HelpString = "Grants, revokes or tests advancements.",
+			ParameterCombinations =
+			{
+				{
+					Params = "grant|revoke <player> only|until|from|through <advancement> [criterion]",
+					Help = "Grants or revokes the advancement, its ancestors (until), its descendants (from) or both (through).",
+				},
+				{
+					Params = "grant|revoke <player> everything",
+					Help = "Grants or revokes every loaded advancement.",
+				},
+				{
+					Params = "test <player> <advancement> [criterion]",
+					Help = "Tests whether the player has the advancement or the criterion.",
+				},
+			},
+		},
+
 		["/ban"] = 
 		{
 			Permission = "core.ban",
@@ -1148,6 +1170,12 @@ g_PluginInfo =
 			HelpString = "Shows the version of the server software.",
 		},
 
+		["advancement"] =
+		{
+			Handler = HandleConsoleAdvancement,
+			HelpString = "Grants, revokes or tests advancements.",
+		},
+
 		["ban"] =
 		{
 			Handler =  HandleConsoleBan,
@@ -1970,6 +1998,12 @@ g_PluginInfo =
 		["core.whitelist"] =
 		{
 			Description = "Allows players to manage the whitelist.",
+			RecommendedGroups = "admins",
+		},
+
+		["core.advancement"] =
+		{
+			Description = "Allows players to grant, revoke and test advancements.",
 			RecommendedGroups = "admins",
 		},
 
