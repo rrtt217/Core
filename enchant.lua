@@ -746,12 +746,28 @@ function HandleEnchantCommand( Split, Player, _, Origin )
 
 	SendMessage( Player, ReturnMessage )
 	if IsSuccess then
+		NotifyEnchantedItem( CompletePlayerName )
 		local MsgString = string.format( LogMessageSuccess, EnchantmentName, ItemName, CompletePlayerName )
 		LOG( string.format( ConsoleMessage, Player:GetName(), MsgString ) )
 	end
 
 	return true
 end
+
+
+
+
+--- Notifies the advancement system that the target's held item was enchanted.
+-- The vanilla levels condition counts XP levels spent; the command spends none, so pass 0.
+function NotifyEnchantedItem( a_PlayerName )
+	cRoot:Get():FindAndDoWithPlayer( a_PlayerName,
+		function( a_Target )
+			a_Target:TriggerEnchantedItem( a_Target:GetEquippedItem(), 0 )
+			return true
+		end
+	)
+end
+
 
 
 --- Handles the enchant console command
@@ -781,6 +797,7 @@ function HandleConsoleEnchant( Split, _, _, Origin )
 
 	LOG( ReturnMessage )
 	if IsSuccess then
+		NotifyEnchantedItem( CompletePlayerName )
 		local MsgString = string.format( LogMessageSuccess, EnchantmentName, ItemName, CompletePlayerName )
 		LOG( string.format( ConsoleMessage, "Console", MsgString ) )
 	end
