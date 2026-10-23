@@ -14,19 +14,18 @@ local function SpawnEntity(EntityName, World, X, Y, Z, Player)
 	end
 
 	if (Info.Kind == "mob") then
-		World:SpawnMob(X, Y, Z, Info.MobType)
+		return true, World:SpawnMob(X, Y, Z, Info.MobType)
 	elseif (Info.Kind == "minecart") then
-		World:SpawnMinecart(Vector3d(X, Y, Z), Info.CartType)
+		return true, World:SpawnMinecart(Vector3d(X, Y, Z), Info.CartType)
 	elseif (Info.Kind == "projectile") then
 		-- A projectile remembers who shot it and with what. Without a player (the console) there is neither,
 		-- so it starts at rest instead of inheriting a look direction - and no nil method is called.
 		if (Player ~= nil) then
-			World:CreateProjectile(
+			return true, World:CreateProjectile(
 				Vector3d(X, Y, Z), Info.ProjectileKind, Player, Player:GetEquippedItem(), Player:GetLookVector() * 20
 			)
-		else
-			World:CreateProjectile(Vector3d(X, Y, Z), Info.ProjectileKind, nil, cItem())
 		end
+		return true, World:CreateProjectile(Vector3d(X, Y, Z), Info.ProjectileKind, nil, cItem())
 	elseif (Info.Kind == "boat") then
 		World:SpawnBoat(Vector3d(X, Y, Z), cBoat.bmOak)
 	elseif (Info.Kind == "falling_block") then
@@ -85,12 +84,21 @@ function HandleSummonCommand(Split, Player, _, Origin)
 			Z = Player:GetPosZ()
 		end
 
-		if SpawnEntity(Split[2], World, X, Y, Z, Player) then
+		local Success, EntityId = SpawnEntity(Split[2], World, X, Y, Z, Player)
+		if Success then
 			Response = SendMessageSuccess(
 				Player,
 				"Successfully summoned entity at [X:" .. math.floor(X)
 					.. " Y:" .. math.floor(Y) .. " Z:" .. math.floor(Z) .. "]"
 			)
+			if (Player ~= nil) and (type(EntityId) == "number") then
+				World:DoWithEntityByID(EntityId,
+					function( a_Entity )
+						Player:TriggerSummonedEntity( a_Entity )
+						return true
+					end
+				)
+			end
 		else
 			Response = SendMessageFailure(Player, "Unknown entity '" .. Split[2] .. "'")
 		end
