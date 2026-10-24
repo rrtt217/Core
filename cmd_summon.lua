@@ -84,21 +84,13 @@ function HandleSummonCommand(Split, Player, _, Origin)
 			Z = Player:GetPosZ()
 		end
 
-		local Success, EntityId = SpawnEntity(Split[2], World, X, Y, Z, Player)
+		local Success = SpawnEntity(Split[2], World, X, Y, Z, Player)
 		if Success then
 			Response = SendMessageSuccess(
 				Player,
 				"Successfully summoned entity at [X:" .. math.floor(X)
 					.. " Y:" .. math.floor(Y) .. " Z:" .. math.floor(Z) .. "]"
 			)
-			if (Player ~= nil) and (type(EntityId) == "number") then
-				World:DoWithEntityByID(EntityId,
-					function( a_Entity )
-						Player:TriggerSummonedEntity( a_Entity )
-						return true
-					end
-				)
-			end
 		else
 			Response = SendMessageFailure(Player, "Unknown entity '" .. Split[2] .. "'")
 		end
